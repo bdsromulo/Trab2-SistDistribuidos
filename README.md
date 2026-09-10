@@ -1,6 +1,6 @@
 # Trabalho 2 - Sistemas Distribuídos
 
-Backend distribuído de um sistema de e-commerce, desenvolvido em Ruby, com microsserviços orientados a eventos, RabbitMQ e assinatura digital assimétrica.
+Backend distribuído de um sistema de e-commerce, desenvolvido em Go, com microsserviços orientados a eventos, RabbitMQ e assinatura digital assimétrica.
 
 > Status: documentação e planejamento iniciais. A implementação e as instruções definitivas de execução ainda serão adicionadas.
 
@@ -22,9 +22,9 @@ O uso de exchange do tipo `fanout` é proibido.
 
 ## Material de referência
 
-- [Tutorial oficial do RabbitMQ para Ruby](https://www.rabbitmq.com/tutorials/tutorial-one-ruby)
+- [Tutorial oficial do RabbitMQ para Go](https://www.rabbitmq.com/tutorials/tutorial-one-go)
 
-Para este trabalho, devem ser estudados principalmente os tutoriais 1, 2, 3 e 4. O tutorial 3 ajuda a compreender publish/subscribe e bindings, mas seu exemplo usa `fanout`, que não pode ser utilizada na solução. A implementação deverá usar `direct` para os eventos do e-commerce e `topic` para promoções.
+Para este trabalho, devem ser estudados principalmente os tutoriais 1, 2, 3 e 4 na versão para Go. O tutorial 3 ajuda a compreender publish/subscribe e bindings, mas seu exemplo usa `fanout`, que não pode ser utilizada na solução. A implementação deverá usar `direct` para os eventos do e-commerce e `topic` para promoções.
 
 ## Execução
 

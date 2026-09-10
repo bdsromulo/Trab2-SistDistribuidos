@@ -6,10 +6,10 @@
 **/*_private.pem
 **/private_key.pem
 
-# Dependências e artefatos Ruby
-.bundle/
-vendor/bundle/
-*.gem
+# Dependências e artefatos Go
+vendor/
+coverage.out
+*.test
 
 # Estado local e temporários
 tmp/

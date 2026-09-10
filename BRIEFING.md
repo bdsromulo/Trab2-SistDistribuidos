@@ -122,29 +122,30 @@ Uma proposta de envelope JSON é:
 }
 ```
 
-O formato definitivo deve deixar explícito quais campos entram na assinatura. Em Ruby, a implementação pode usar `OpenSSL::Digest::SHA256`, `OpenSSL::PKey::RSA` e Base64.
+O formato definitivo deve deixar explícito quais campos entram na assinatura. Em Go, a implementação pode usar os pacotes da biblioteca padrão `crypto/sha256`, `crypto/rsa`, `crypto/rand`, `crypto/x509`, `encoding/pem` e `encoding/base64`.
 
-## 5. Como Ruby será utilizado
+## 5. Como Go será utilizado
 
-Cada microsserviço e cada consumidor será um processo Ruby independente. A gem `bunny` fará a conexão AMQP com o RabbitMQ. Bibliotecas padrão cuidarão de JSON, UUIDs, horários e criptografia.
+Cada microsserviço e cada consumidor será um processo Go independente. O pacote `github.com/rabbitmq/amqp091-go` fará a conexão AMQP com o RabbitMQ. A biblioteca padrão cuidará de JSON, horários e criptografia; para UUIDs, pode ser utilizado `github.com/google/uuid`.
 
 Dependências previstas:
 
-```ruby
-gem "bunny"
-gem "dotenv"
+```text
+github.com/rabbitmq/amqp091-go
+github.com/google/uuid
+github.com/joho/godotenv
 ```
 
-`dotenv` é opcional, mas ajuda a manter endereço, usuário e senha do RabbitMQ fora do código. Testes poderão usar Minitest, que já acompanha Ruby, ou RSpec se a dupla preferir.
+`github.com/joho/godotenv` é opcional, mas ajuda a manter endereço, usuário e senha do RabbitMQ fora do código. Os testes podem usar o pacote padrão `testing` e ser executados com `go test ./...`.
 
-Conceitos de Ruby que serão necessários para a defesa:
+Conceitos de Go que serão necessários para a defesa:
 
-- executar arquivos com `ruby caminho/do/arquivo.rb`;
-- instalar dependências com `bundle install`;
-- classes, módulos, hashes e arrays;
-- leitura e geração de JSON;
-- tratamento de exceções;
-- blocos usados pela API da gem Bunny;
+- inicializar o módulo com `go mod init` e instalar dependências com `go get`;
+- executar processos com `go run ./cmd/nome-do-processo`;
+- packages, structs, interfaces, maps e slices;
+- leitura e geração de JSON com `encoding/json`;
+- tratamento explícito de erros;
+- goroutines e channels quando forem necessários para consumo concorrente;
 - separação entre código compartilhado e regras de cada processo.
 
 ## 6. Esqueleto previsto
@@ -154,41 +155,39 @@ Conceitos de Ruby que serão necessários para a defesa:
 |-- AGENTS.md
 |-- README.md
 |-- BRIEFING.md
-|-- Gemfile
+|-- go.mod
+|-- go.sum
 |-- .env.example
 |-- .gitignore
 |-- docker-compose.yml
-|-- bin/
-|   |-- generate_keys.rb
-|   `-- setup.rb
-|-- shared/
-|   |-- rabbit_connection.rb
-|   |-- event_envelope.rb
-|   |-- event_publisher.rb
-|   |-- event_consumer.rb
-|   `-- signature.rb
+|-- cmd/
+|   |-- principal/main.go
+|   |-- estoque/main.go
+|   |-- pagamento/main.go
+|   |-- entrega/main.go
+|   |-- promocoes/main.go
+|   |-- promocoes-c1/main.go
+|   `-- promocoes-c2/main.go
+|-- internal/
+|   |-- messaging/
+|   |   |-- connection.go
+|   |   |-- publisher.go
+|   |   `-- consumer.go
+|   |-- events/
+|   |   `-- envelope.go
+|   `-- security/
+|       |-- signature.go
+|       `-- keys.go
 |-- services/
 |   |-- principal/
-|   |   |-- app.rb
-|   |   |-- orders.rb
-|   |   `-- keys/public/
 |   |-- estoque/
-|   |   |-- app.rb
-|   |   |-- inventory.rb
-|   |   `-- keys/public/
 |   |-- pagamento/
-|   |   |-- app.rb
-|   |   `-- keys/public/
 |   |-- entrega/
-|   |   |-- app.rb
-|   |   `-- keys/public/
 |   `-- promocoes/
-|       |-- app.rb
-|       `-- keys/public/
-|-- consumers/
-|   |-- promocoes_c1.rb
-|   `-- promocoes_c2.rb
-`-- test/
+|-- keys/public/
+|-- scripts/
+|   `-- generate_keys.go
+`-- internal/.../*_test.go
 ```
 
 O esqueleto é uma previsão e poderá ser simplificado durante a implementação. Arquivos de estado local (pedidos e estoque) podem ser mantidos inicialmente em JSON, desde que cada serviço seja dono de seus próprios dados e que isso seja explicado na defesa.
@@ -205,10 +204,10 @@ O esqueleto é uma previsão e poderá ser simplificado durante a implementaçã
 
 ## 8. Próximos passos recomendados
 
-1. Instalar Ruby, VS Code e Docker Desktop e validar suas versões.
+1. Instalar Go, VS Code e Docker Desktop e validar suas versões.
 2. Subir RabbitMQ com a interface de gerenciamento e acessar o painel local.
-3. Criar `Gemfile`, `.gitignore`, `.env.example` e `docker-compose.yml`.
-4. Fazer um exercício mínimo do tutorial oficial Ruby: um produtor e um consumidor.
+3. Criar `go.mod`, `.gitignore`, `.env.example` e `docker-compose.yml`.
+4. Fazer um exercício mínimo do tutorial oficial Go: um produtor e um consumidor.
 5. Implementar e testar o envelope assinado isoladamente.
 6. Criar a conexão e as declarações de exchanges, filas e bindings.
 7. Implementar o fluxo feliz: pedido criado -> estoque OK -> pagamento aprovado -> pedido enviado.
@@ -231,5 +230,5 @@ O esqueleto é uma previsão e poderá ser simplificado durante a implementaçã
 
 - Enunciado: `Trab1_MOM_ecommerce_2026_2.pdf`.
 - Complemento do Classroom: `Especificação Classroom.txt`.
-- [Tutorial oficial do RabbitMQ para Ruby](https://www.rabbitmq.com/tutorials/tutorial-one-ruby).
+- [Tutorial oficial do RabbitMQ para Go](https://www.rabbitmq.com/tutorials/tutorial-one-go).
 
