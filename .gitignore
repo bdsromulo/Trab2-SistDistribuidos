@@ -1,0 +1,23 @@
+# Credenciais e configuração local
+.env
+
+# Chaves privadas (as chaves públicas podem ser versionadas)
+**/keys/private/
+**/*_private.pem
+**/private_key.pem
+
+# Dependências e artefatos Ruby
+.bundle/
+vendor/bundle/
+*.gem
+
+# Estado local e temporários
+tmp/
+log/
+*.log
+
+# Sistema operacional e editor
+.DS_Store
+Thumbs.db
+.vscode/*.log
+
