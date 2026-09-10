@@ -21,3 +21,5 @@ log/
 Thumbs.db
 .vscode/*.log
 
+# Instruções específicas do ambiente desta máquina
+LOCAL_SETUP.md

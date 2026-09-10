@@ -26,39 +26,6 @@ O uso de exchange do tipo `fanout` é proibido.
 
 Para este trabalho, devem ser estudados principalmente os tutoriais 1, 2, 3 e 4. O tutorial 3 ajuda a compreender publish/subscribe e bindings, mas seu exemplo usa `fanout`, que não pode ser utilizada na solução. A implementação deverá usar `direct` para os eventos do e-commerce e `topic` para promoções.
 
-## Ambiente previsto
-
-- Windows 11;
-- Visual Studio Code;
-- Ruby instalado pelo RubyInstaller;
-- RabbitMQ executado localmente (preferencialmente por Docker Desktop, para simplificar o setup);
-- gem `bunny` para comunicação AMQP;
-- biblioteca padrão `openssl` do Ruby para hash, assinatura e verificação RSA;
-- Bundler para gerenciar dependências.
-
-## Instalação preliminar no Windows 11
-
-1. Instalar o [Visual Studio Code](https://code.visualstudio.com/).
-2. Instalar o [RubyInstaller com Devkit](https://rubyinstaller.org/), usando uma versão estável de Ruby.
-3. Fechar e abrir novamente o terminal do VS Code.
-4. Conferir a instalação:
-
-   ```powershell
-   ruby --version
-   gem --version
-   bundle --version
-   ```
-
-5. Caso `bundle` não seja reconhecido:
-
-   ```powershell
-   gem install bundler
-   ```
-
-6. Instalar o [Docker Desktop](https://www.docker.com/products/docker-desktop/) para executar o RabbitMQ de forma isolada e reproduzível.
-
-Os comandos exatos para iniciar o RabbitMQ, instalar as gems e executar cada processo serão documentados junto com a implementação.
-
 ## Execução
 
 A definir após a criação do código.
