@@ -24,6 +24,26 @@ const (
 	FilaC2        = "fila.C2"
 )
 
+// Binding diz a exchange de uma fila e as binding keys que ela escuta.
+type Binding struct {
+	Exchange string
+	Chaves   []string
+}
+
+// BindingsDaFila é a tabela de filas do README: cada fila recebe só os
+// eventos que o seu consumidor processa.
+var BindingsDaFila = map[string]Binding{
+	FilaPrincipal: {ExchangeECommerce, []string{
+		events.PedidoEstoqueOK, events.EstoqueIndisponivel,
+		events.PagamentoAprovado, events.PagamentoRecusado, events.PedidoEnviado,
+	}},
+	FilaEstoque:   {ExchangeECommerce, []string{events.PedidoCriado, events.PedidoExcluido}},
+	FilaPagamento: {ExchangeECommerce, []string{events.PedidoEstoqueOK}},
+	FilaEntrega:   {ExchangeECommerce, []string{events.PagamentoAprovado}},
+	FilaC1:        {ExchangePromocoes, []string{events.PromocaoCategoriaA, events.PromocaoCategoriaB}},
+	FilaC2:        {ExchangePromocoes, []string{events.PrefixoPromocao + "*"}}, // * = exatamente uma palavra
+}
+
 // ExchangeDoEvento diz em qual exchange cada tipo de evento é publicado:
 // promoções vão para Promocoes; todo o resto, para eCommerce.
 func ExchangeDoEvento(tipo string) string {

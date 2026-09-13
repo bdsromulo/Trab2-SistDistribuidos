@@ -1,0 +1,23 @@
+# RabbitMQ com o painel de gerenciamento.
+# Subir:  docker compose up -d      Painel: http://localhost:15672
+# Usuário e senha vêm do .env (mesmos valores do .env.example se não existir).
+services:
+  rabbitmq:
+    image: rabbitmq:3-management
+    container_name: trab2-rabbitmq
+    hostname: rabbitmq # nome fixo do nó, para os dados do volume continuarem válidos
+    # Em algumas instalações do Docker Desktop o .erlang.cookie chega ao volume
+    # como root e o RabbitMQ não inicia; o chown corrige antes de subir.
+    entrypoint: ["sh", "-c", "chown -R rabbitmq:rabbitmq /var/lib/rabbitmq && exec docker-entrypoint.sh rabbitmq-server"]
+    ports:
+      - "5672:5672"   # AMQP, usado pelos serviços
+      - "15672:15672" # painel web
+    environment:
+      RABBITMQ_DEFAULT_USER: ${RABBITMQ_USER:-ecommerce}
+      RABBITMQ_DEFAULT_PASS: ${RABBITMQ_PASSWORD:-ecommerce}
+    volumes:
+      # guarda filas duráveis e mensagens persistentes quando o container reinicia
+      - rabbitmq-dados:/var/lib/rabbitmq
+
+volumes:
+  rabbitmq-dados:
