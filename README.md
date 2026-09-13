@@ -2,7 +2,7 @@
 
 Backend distribuído de um sistema de e-commerce, desenvolvido em Go, com microsserviços orientados a eventos, RabbitMQ e assinatura digital assimétrica.
 
-> Status: documentação e planejamento iniciais. A implementação e as instruções definitivas de execução ainda serão adicionadas.
+> Status: base comum criada (módulo Go, contrato dos eventos e implementações provisórias). Os serviços ainda estão sendo implementados.
 
 ## Objetivo
 
@@ -32,7 +32,66 @@ A definir após a criação do código.
 
 ## Estrutura do projeto
 
-A definir após a validação e criação do esqueleto inicial. A proposta está descrita em [`BRIEFING.md`](BRIEFING.md).
+```text
+.
+|-- cmd/                    um processo por pasta (go run ./cmd/<nome>)
+|   |-- principal/          menu no terminal, pedidos e status
+|   |-- estoque/
+|   |-- pagamento/
+|   |-- entrega/
+|   |-- promocoes/
+|   |-- c1/                 consumidor de promoções A e B
+|   |-- c2/                 consumidor de todas as promoções
+|   |-- gerar-chaves/       gera as chaves RSA de cada produtor
+|   `-- adulterador/        publica mensagens inválidas (demonstração)
+|-- internal/
+|   |-- events/             contrato: envelope, tipos de evento e dados
+|   |-- security/           assinatura e verificação (Signer, Verifier)
+|   |-- messaging/          RabbitMQ: nomes, publicação e consumo (Publisher)
+|   `-- catalogo/           leitura do catálogo de produtos
+|-- data/catalogo.json      catálogo somente leitura (sem quantidades)
+|-- .env.example            modelo do .env com a conexão do RabbitMQ
+`-- go.mod
+```
+
+Enquanto a assinatura e o publicador reais não existem, os serviços usam as implementações falsas `security.FakeSigner`, `security.FakeVerifier` e `messaging.FakePublisher`.
+
+## Regras combinadas
+
+**Eventos**
+
+- O envelope tem `event_id`, `event_type`, `producer`, `occurred_at` (UTC), `data` e `Signature` (ver `internal/events`).
+- O `event_type` é sempre igual à routing key.
+- Cada tipo de evento tem um único produtor (tabela `events.ProdutorDoEvento`, igual à Figura 1 do enunciado).
+- Motivos de `pedido.excluido`: `usuario`, `falta_estoque` e `pagamento_recusado`. Ele é publicado no máximo uma vez por pedido, e um pedido já enviado não pode ser excluído.
+
+**Assinatura**
+
+- A assinatura cobre todos os campos do envelope, exceto `Signature`: hash SHA-256, assinado com a chave privada do produtor (RSA-2048, PKCS#1 v1.5) e gravado em base64.
+- O consumidor escolhe a chave pública pelo campo `producer`. Mensagem sem assinatura, adulterada, de produtor desconhecido ou com evento que não pertence ao produtor é descartada.
+- As chaves privadas nunca vão para o Git; cada um gera as suas na própria máquina com `go run ./cmd/gerar-chaves`.
+
+**RabbitMQ**
+
+- Exchanges `eCommerce` (direct) e `Promocoes` (topic, sem acento). Não há exchange fanout.
+- Cada consumidor declara a própria fila e os próprios bindings. Filas duráveis e mensagens persistentes.
+- Uma mensagem por vez, com ack manual depois de processar. Mensagem inválida ou com erro é descartada sem voltar para a fila.
+
+| Fila | Routing keys |
+|---|---|
+| `fila.principal` | pedido.estoque_ok, estoque.indisponivel, pagamento.aprovado, pagamento.recusado, pedido.enviado |
+| `fila.estoque` | pedido.criado, pedido.excluido |
+| `fila.pagamento` | pedido.estoque_ok |
+| `fila.entrega` | pagamento.aprovado |
+| `fila.C1` | promocao.categoria.A, promocao.categoria.B |
+| `fila.C2` | promocao.categoria.* |
+
+**Serviços**
+
+- Pedidos (Principal) e estoque (Estoque) ficam em memória. O catálogo não tem quantidades; o estoque inicial vem de um JSON próprio do Estoque.
+- O status de um pedido nunca volta, e eventos de pedidos já excluídos são ignorados.
+- Pagamento: 80% de aprovação, com atraso de 1 a 3 s. Entrega: atraso de 1 a 3 s.
+- Promoções: a cada 5 a 10 s, um produto do catálogo com 5% a 50% de desconto.
 
 ## Repositório
 

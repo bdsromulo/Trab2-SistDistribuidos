@@ -150,6 +150,8 @@ Conceitos de Go que serão necessários para a defesa:
 
 ## 6. Esqueleto previsto
 
+> A estrutura adotada está no [README](README.md#estrutura-do-projeto); este esqueleto ficou como registro do planejamento.
+
 ```text
 .
 |-- AGENTS.md
@@ -193,6 +195,8 @@ Conceitos de Go que serão necessários para a defesa:
 O esqueleto é uma previsão e poderá ser simplificado durante a implementação. Arquivos de estado local (pedidos e estoque) podem ser mantidos inicialmente em JSON, desde que cada serviço seja dono de seus próprios dados e que isso seja explicado na defesa.
 
 ## 7. Decisões que precisam ser tomadas antes da implementação
+
+> Decisões tomadas: ver a seção [Regras combinadas](README.md#regras-combinadas) do README.
 
 - persistência apenas em memória ou em arquivos JSON locais;
 - nomes definitivos das filas;
