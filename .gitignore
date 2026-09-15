@@ -26,3 +26,9 @@ LOCAL_SETUP.md
 
 # Espaço reservado para a execução dos tutoriais, não versionar
 tutorial/
+
+# Arquivos de chaves privadas e públicas
+*.pem
+
+# Ignorar binários
+cmd/**/main
