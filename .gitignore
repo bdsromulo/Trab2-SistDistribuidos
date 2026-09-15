@@ -23,3 +23,6 @@ Thumbs.db
 
 # Instruções específicas do ambiente desta máquina
 LOCAL_SETUP.md
+
+# Espaço reservado para a execução dos tutoriais, não versionar
+tutorial/
