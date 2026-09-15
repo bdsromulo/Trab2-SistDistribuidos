@@ -7,6 +7,7 @@ import (
 	"crypto/sha256"
 	"crypto/x509"
 	"encoding/pem"
+	"fmt"
 	"log"
 	"os"
 )
@@ -43,9 +44,13 @@ func VerifySignature(public_key *rsa.PublicKey, content string, signature []byte
 	return true
 }
 
-func PersistKeys(private_key *rsa.PrivateKey) {
+func PersistKeys(private_key *rsa.PrivateKey, servicoNome string) {
 	pub_key := &private_key.PublicKey
-	priv_file, err := os.Create("private_key.pem")
+
+	os.RemoveAll("key")
+	os.MkdirAll("key", 0755)
+
+	priv_file, err := os.Create("key/private_key.pem")
 	if err != nil {
 		log.Panicf("Erro ao criar arquivo de chave privada: %s", err)
 	}
@@ -66,6 +71,29 @@ func PersistKeys(private_key *rsa.PrivateKey) {
 		Type:  "RSA PUBLIC KEY",
 		Bytes: x509.MarshalPKCS1PublicKey(pub_key),
 	})
+
+	microservicos := []string{"entrega", "estoque", "pagamento", "principal", "promocoes"}
+	for _, ms := range microservicos {
+		dirPath := fmt.Sprintf("../../cmd/%s/%s-pub", ms, servicoNome)
+		os.RemoveAll(dirPath)
+		err := os.MkdirAll(dirPath, 0755)
+		if err != nil {
+			log.Panicf("Erro ao criar diretório para chave pública do serviço %s: %s", ms, err)
+		}
+
+		pub_dest := fmt.Sprintf("%s/public_key.pem", dirPath)
+		pub_dest_file, err := os.Create(pub_dest)
+		if err != nil {
+			log.Panicf("Erro ao criar arquivo de chave pública no serviço %s: %s", ms, err)
+		}
+		defer pub_dest_file.Close()
+
+		pem.Encode(pub_dest_file, &pem.Block{
+			Type:  "RSA PUBLIC KEY",
+			Bytes: x509.MarshalPKCS1PublicKey(pub_key),
+		})
+		log.Printf("Chave pública distribuída para %s", ms)
+	}
 }
 
 func ReadPubKeyFromFile(path string) *rsa.PublicKey {

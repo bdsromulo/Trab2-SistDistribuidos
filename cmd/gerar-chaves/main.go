@@ -10,7 +10,7 @@ import (
 func main() {
 	FILE_NAME := "public_key.pem"
 	private_key := signature.GenerateKeys()
-	signature.PersistKeys(private_key)
+	signature.PersistKeys(private_key, "gerar-chaves")
 	//log.Printf("Chave privada: %v e chave pública: %v", private_key, public_key)
 	payload := "PAYLOAD DE TESTE"
 	//hash := signature.BuildPayloadHash([]byte(payload))
