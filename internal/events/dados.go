@@ -44,7 +44,6 @@ type ItemFaltante struct {
 // EstoqueIndisponivelDados é publicado pelo Estoque quando falta algum item.
 type EstoqueIndisponivelDados struct {
 	PedidoID       string         `json:"pedido_id"`
-	ItensFaltantes []ItemFaltante `json:"itens_faltantes"`
 }
 
 // PagamentoAprovadoDados é publicado pelo Pagamento.
