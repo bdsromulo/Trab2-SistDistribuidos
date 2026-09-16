@@ -23,6 +23,13 @@ func main() {
 		log.Fatal(err)
 	}
 
+	// As chaves são carregadas antes de tudo: sem assinatura real o serviço
+	// não sobe, em vez de rodar silenciosamente sem garantia de autenticidade.
+	privada, publicas, err := security.CarregarChaves(".", events.Principal)
+	if err != nil {
+		log.Fatalf("carregar chaves (rode o cmd/gerar-chaves): %v", err)
+	}
+
 	conn, chConsumo, err := messaging.Conectar(messaging.CarregarConfig())
 	if err != nil {
 		log.Fatal(err)
@@ -41,8 +48,7 @@ func main() {
 		log.Fatal(err)
 	}
 
-	// Enquanto o security real não existe, assinatura e verificação são falsas.
-	pub := messaging.NovoPublisher(chPublicacao, events.Principal, security.FakeSigner{})
+	pub := messaging.NovoPublisher(chPublicacao, events.Principal, security.NovoSigner(privada))
 	pedidos := NovosPedidos()
 	avisar := func(msg string) { fmt.Printf("\n[evento] %s\n", msg) }
 	servico := NovoServico(pedidos, pub, avisar)
@@ -51,7 +57,7 @@ func main() {
 	defer cancelar()
 
 	go func() {
-		err := messaging.Consumir(ctx, chConsumo, messaging.FilaPrincipal, security.FakeVerifier{}, servico.TratarEvento)
+		err := messaging.Consumir(ctx, chConsumo, messaging.FilaPrincipal, security.NovoVerifier(publicas), servico.TratarEvento)
 		if err != nil && !errors.Is(err, context.Canceled) {
 			log.Fatalf("consumo da %s parou: %v", messaging.FilaPrincipal, err)
 		}

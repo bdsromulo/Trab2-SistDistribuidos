@@ -28,7 +28,35 @@ Para este trabalho, devem ser estudados principalmente os tutoriais 1, 2, 3 e 4 
 
 ## Execução
 
-A definir após a criação do código.
+### Chaves
+
+Cada processo assina o que publica e confere o que consome. Antes de subir os
+serviços, é preciso ter as chaves no lugar:
+
+| Arquivo | Caminho |
+|---|---|
+| Privada do próprio processo | `cmd/<processo>/key/private_key.pem` |
+| Pública de cada produtor | `cmd/<processo>/<produtor>-pub/public_key.pem` |
+
+Os produtores são `principal`, `estoque`, `pagamento`, `entrega` e `promocoes`.
+As privadas não são versionadas (`.gitignore`).
+
+Um serviço que não encontrar as chaves **não sobe**, e diz qual arquivo faltou.
+É proposital: assinatura desligada em silêncio esconderia justamente o que o
+trabalho precisa demonstrar.
+
+> O `cmd/gerar-chaves` ainda não produz esse layout — hoje ele gera um único
+> par e distribui a pública sob o nome `gerar-chaves-pub`. Enquanto isso não
+> for ajustado, o layout acima é montado à mão para testar.
+
+### Serviços
+
+A definir conforme os processos forem ficando prontos. Um terminal por
+processo, a partir da raiz do repositório:
+
+```bash
+go run ./cmd/principal
+```
 
 ## Estrutura do projeto
 
