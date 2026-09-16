@@ -32,3 +32,6 @@ tutorial/
 
 # Ignorar binários
 cmd/**/main
+
+# Pasta de testes rápidos locais (não versionar)
+tests/
