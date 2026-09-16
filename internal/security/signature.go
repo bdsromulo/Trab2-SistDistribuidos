@@ -75,3 +75,52 @@ func (s RSASigner) Sign(env *events.Envelope) (err error) {
 }
 
 var _ Signer = RSASigner{}
+
+// RSAVerifier confere assinaturas com as chaves públicas dos produtores,
+// carregadas uma única vez na partida do processo.
+type RSAVerifier struct {
+	publicas map[string]*rsa.PublicKey
+}
+
+// NovoVerifier cria o verificador a partir do mapa produtor -> chave pública.
+func NovoVerifier(publicas map[string]*rsa.PublicKey) RSAVerifier {
+	return RSAVerifier{publicas: publicas}
+}
+
+// Verify devolve nil somente se a mensagem for autêntica e íntegra.
+//
+// A ordem das checagens vai do mais barato para o mais caro, e cada recusa
+// usa o erro já declarado em security.go para o consumidor poder distinguir
+// o motivo no log.
+func (v RSAVerifier) Verify(env events.Envelope) error {
+	if env.Signature == "" {
+		return ErrSemAssinatura
+	}
+
+	publica, conhecido := v.publicas[env.Producer]
+	if !conhecido {
+		return fmt.Errorf("%w: %q", ErrProdutorDesconhecido, env.Producer)
+	}
+
+	// Impede um produtor legítimo de assinar um evento que não é dele.
+	dono, existe := events.ProdutorDoEvento[env.EventType]
+	if !existe || dono != env.Producer {
+		return fmt.Errorf("%w: %q não publica %q", ErrEventoNaoPertenceAoProdutor, env.Producer, env.EventType)
+	}
+
+	bruta, err := base64.StdEncoding.DecodeString(env.Signature)
+	if err != nil {
+		return fmt.Errorf("%w: base64 malformado", ErrAssinaturaInvalida)
+	}
+
+	conteudo, err := canonicalizar(env)
+	if err != nil {
+		return err
+	}
+	if !signature.VerifySignature(publica, conteudo, bruta) {
+		return ErrAssinaturaInvalida
+	}
+	return nil
+}
+
+var _ Verifier = RSAVerifier{}
