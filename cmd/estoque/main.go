@@ -4,24 +4,11 @@ package main
 import (
 	"encoding/json"
 	"log"
-	"sort"
 
 	e "github.com/bdsromulo/Trab2-SistDistribuidos/internal/events"
 	u "github.com/bdsromulo/Trab2-SistDistribuidos/internal/utils"
 	amqp "github.com/rabbitmq/amqp091-go"
 )
-
-func imprimirEstoque(est Estoque) {
-	ids := make([]string, 0, len(est.Produtos))
-	for id := range est.Produtos {
-		ids = append(ids, id)
-	}
-	sort.Strings(ids)
-	log.Println("=== Estoque Atual ===")
-	for _, id := range ids {
-		log.Printf("  Produto %s: %d unidades", id, est.Produtos[id].Availability)
-	}
-}
 
 func main() {
 	est := loadEstoque()
