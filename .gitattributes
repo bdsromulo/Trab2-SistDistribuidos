@@ -1,0 +1,3 @@
+# Hooks sao executados pelo sh: precisam de fim de linha LF mesmo no Windows,
+# senao o "#!/bin/sh" vem com \r e o interpretador nao e encontrado.
+.githooks/** text eol=lf
