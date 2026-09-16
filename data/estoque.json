@@ -1,0 +1,11 @@
+[
+  { "id": "P01", "availability": 10 },
+  { "id": "P02",  "availability": 5 },
+  { "id": "P03",  "availability": 15 },
+  { "id": "P04",  "availability": 7 },
+  { "id": "P05",  "availability": 12 },
+  { "id": "P06",  "availability": 20 },
+  { "id": "P07",  "availability": 8 },
+  { "id": "P08",  "availability": 6 },
+  { "id": "P09",  "availability": 9 }
+]
