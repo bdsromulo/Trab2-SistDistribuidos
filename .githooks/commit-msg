@@ -1,0 +1,23 @@
+#!/bin/sh
+# Remove qualquer creditacao de IA da mensagem de commit.
+# Regra do repositorio (AGENTS.md): nenhuma LLM/agente se atribui autoria.
+# Ativado por: git config core.hooksPath .githooks
+msg_file="$1"
+tmp_file="$msg_file.semia"
+
+grep -viE \
+  -e '^[[:space:]]*(co-authored-by|signed-off-by|assisted-by|generated-by)[[:space:]]*:.*(claude|anthropic|openai|chatgpt|codex|copilot|gemini|antigravity|cursor|noreply@anthropic\.com)' \
+  -e '(generated with|gerado (com|por)).*(claude|claude code|chatgpt|codex|copilot|gemini|ia|ai)' \
+  -e '^[[:space:]]*🤖' \
+  "$msg_file" > "$tmp_file"
+
+# remove linhas em branco sobrando no final
+awk 'BEGIN{n=0} {lines[NR]=$0} END{while(n<NR && lines[NR-n] ~ /^[[:space:]]*$/) n++; for(i=1;i<=NR-n;i++) print lines[i]}' \
+  "$tmp_file" > "$msg_file"
+rm -f "$tmp_file"
+
+if ! grep -qE '[^[:space:]#]' "$msg_file"; then
+  echo "commit-msg: mensagem vazia apos remover a creditacao de IA. Escreva uma mensagem propria." >&2
+  exit 1
+fi
+exit 0

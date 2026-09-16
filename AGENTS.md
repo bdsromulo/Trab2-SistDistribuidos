@@ -16,3 +16,18 @@ Estas regras se aplicam a todo o repositório.
 - Alterações devem privilegiar clareza, organização simples e documentação didática.
 - Não publicar (`push`) nem criar commits sem solicitação explícita do responsável humano.
 
+
+## Garantia automática (hook)
+
+A regra acima não depende de boa vontade da ferramenta: o hook versionado
+`.githooks/commit-msg` remove qualquer trailer de coautoria de IA, assinatura
+`Signed-off-by`/`Assisted-by` de ferramenta, frase "Generated with ..." ou
+linha com 🤖 antes de o commit ser gravado.
+
+Cada pessoa da dupla precisa ativá-lo uma vez, após clonar:
+
+```
+git config core.hooksPath .githooks
+```
+
+Nunca usar `--no-verify`: isso ignora o hook.
