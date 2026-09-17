@@ -46,7 +46,7 @@ func main() {
 			"Gere as chaves uma única vez com: go run ./cmd/gerar-chaves")
 	}
 
-	log.Printf(" [*] Publicando promoções a cada 5 a 10 s...")
+	log.Printf(" [*] Publicando promoções a cada 20 a 30 s...")
 	for {
 		p := produtos[rand.IntN(len(produtos))]
 		desconto := 5 + rand.IntN(46) // de 5% a 50%
@@ -92,6 +92,6 @@ func main() {
 		log.Printf("Publicado %s: %s de R$ %.2f por R$ %.2f (-%d%%)",
 			tipo, promo.Nome, promo.PrecoOriginal, promo.PrecoPromocional, promo.Desconto)
 
-		time.Sleep(time.Duration(5+rand.IntN(6)) * time.Second)
+		time.Sleep(time.Duration(20+rand.IntN(11)) * time.Second)
 	}
 }
