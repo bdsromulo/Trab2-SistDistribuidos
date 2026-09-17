@@ -26,6 +26,22 @@ Para este trabalho, devem ser estudados principalmente os tutoriais 1, 2, 3 e 4 
 
 ## Execução
 
+### Pré-requisitos
+
+- [Go](https://go.dev/dl/) 1.22 ou mais recente (`go version`). As dependências são baixadas sozinhas no primeiro `go run`.
+- [Docker](https://docs.docker.com/get-docker/) com o Compose v2 (`docker compose version`), com o daemon rodando (no Windows e no macOS, o Docker Desktop aberto). Ele sobe o RabbitMQ.
+- As portas 5672 e 15672 livres na máquina.
+
+### Resumo
+
+```bash
+docker compose up -d            # 1. RabbitMQ
+go run ./cmd/gerar-chaves       # 2. chaves (obrigatório antes de subir os serviços)
+go run ./cmd/estoque            # 3. um terminal por serviço, nesta ordem:
+                                #    estoque, pagamento, entrega, c1, c2, promocoes, principal
+go run ./cmd/adulterador        # 4. opcional: demonstração do descarte
+```
+
 Todos os comandos rodam **a partir da raiz do repositório**: os caminhos das chaves e de `data/` são relativos a ela.
 
 ### 1. RabbitMQ
@@ -38,7 +54,7 @@ Painel em http://localhost:15672 (usuário e senha `ecommerce`).
 
 ### 2. Chaves
 
-Uma única vez, antes de subir os serviços:
+**Obrigatório**, uma única vez, antes de subir os serviços. As chaves privadas não vêm com o projeto: cada máquina gera as suas. Sem este passo, cada serviço para na partida com "Chave privada não encontrada".
 
 ```bash
 go run ./cmd/gerar-chaves
@@ -51,7 +67,7 @@ Ele gera um par RSA-2048 para cada microsserviço e distribui as públicas:
 | Par do próprio serviço | `cmd/<ms>/keys/private_key.pem` e `cmd/<ms>/keys/public_key.pem` |
 | Pública de cada outro serviço | `cmd/<ms>/<produtor>-pub/public_key.pem` |
 
-Nenhum `.pem` é versionado (`.gitignore`). Rodar o `gerar-chaves` de novo troca todos os pares, então os serviços precisam ser reiniciados depois.
+Nenhum `.pem` é versionado (`.gitignore`). A cópia entregue em `.zip` traz só as chaves públicas, para mostrar a pasta de cada serviço; a privada nunca sai da máquina onde foi gerada. Rodar o `gerar-chaves` substitui todas as chaves, inclusive essas públicas, então os serviços precisam ser reiniciados depois.
 
 ### 3. Serviços
 
