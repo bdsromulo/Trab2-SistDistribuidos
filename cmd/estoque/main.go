@@ -2,6 +2,7 @@
 package main
 
 import (
+	"encoding/base64"
 	"encoding/json"
 	"log"
 	"time"
@@ -121,7 +122,10 @@ func main() {
 						Producer:   e.ProdutorDoEvento[e.PedidoEstoqueOK],
 						OccurredAt: time.Now().UTC().Truncate(time.Millisecond),
 						Data:       p_json,
-						Signature:  string(s.SignPayload(pk, string(p_json))),
+						// A assinatura viaja em base64: bytes crus seriam
+						// desfeitos pelo json.Marshal, que coerce a string
+						// para UTF-8 válido.
+						Signature: base64.StdEncoding.EncodeToString(s.SignPayload(pk, string(p_json))),
 					}
 
 					body_json, err := json.Marshal(body)
@@ -153,8 +157,9 @@ func main() {
 						Producer:   e.ProdutorDoEvento[e.EstoqueIndisponivel],
 						OccurredAt: time.Now().UTC().Truncate(time.Millisecond),
 						Data:       p_json,
-						Signature:  string(s.SignPayload(pk, string(p_json))),
+						Signature:  base64.StdEncoding.EncodeToString(s.SignPayload(pk, string(p_json))),
 					}
+
 					body_json, err := json.Marshal(body)
 					u.FailOnError(err, "Erro ao serializar o envelope do pedido estoque indisponível")
 
