@@ -6,6 +6,7 @@ import (
 	"slices"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/bdsromulo/Trab2-SistDistribuidos/internal/catalogo"
 	"github.com/bdsromulo/Trab2-SistDistribuidos/internal/events"
@@ -45,10 +46,13 @@ func novoTeste(t *testing.T) (*Servico, *Pedidos, *gravador, Pedido) {
 	pedidos := NovosPedidos()
 	pub := &gravador{}
 	s := NovoServico(pedidos, pub.publicar, func(string) {})
+	s.janela = time.Hour // o teste encerra a janela na mão, sem esperar o timer
 	pedido, err := s.CriarPedido(itensTeste)
 	if err != nil {
 		t.Fatal(err)
 	}
+	s.confirmar(pedido.ID)
+	pedido, _ = pedidos.Buscar(pedido.ID)
 	return s, pedidos, pub, pedido
 }
 
@@ -173,6 +177,45 @@ func TestExclusaoPeloUsuario(t *testing.T) {
 	}
 }
 
+func TestCancelamentoNaJanelaNaoPublicaNada(t *testing.T) {
+	pedidos := NovosPedidos()
+	pub := &gravador{}
+	s := NovoServico(pedidos, pub.publicar, func(string) {})
+	s.janela = time.Hour
+	pedido, _ := s.CriarPedido(itensTeste)
+	if pedido.Status != StatusAguardandoConfirmacao || len(pub.publicados) != 0 {
+		t.Fatalf("durante a janela: status %s, publicados %v", pedido.Status, pub.tipos())
+	}
+
+	if err := s.ExcluirPeloUsuario(pedido.ID); err != nil {
+		t.Fatal(err)
+	}
+	s.confirmar(pedido.ID) // a janela acaba depois do cancelamento
+
+	if got := status(t, pedidos, pedido.ID); got != StatusExcluido {
+		t.Errorf("status: %s", got)
+	}
+	if len(pub.publicados) != 0 {
+		t.Errorf("pedido cancelado na janela não deveria publicar nada: %v", pub.tipos())
+	}
+}
+
+func TestPedidoPagoNaoPodeSerExcluido(t *testing.T) {
+	s, pedidos, pub, pedido := novoTeste(t)
+	tratar(t, s, evento(t, events.PedidoEstoqueOK, events.PedidoEstoqueOKDados{PedidoID: pedido.ID}))
+	tratar(t, s, evento(t, events.PagamentoAprovado, events.PagamentoAprovadoDados{PedidoID: pedido.ID}))
+
+	if err := s.ExcluirPeloUsuario(pedido.ID); !errors.Is(err, ErrPedidoPago) {
+		t.Errorf("esperava ErrPedidoPago, veio %v", err)
+	}
+	if got := status(t, pedidos, pedido.ID); got != StatusPago {
+		t.Errorf("status: %s", got)
+	}
+	if !slices.Equal(pub.tipos(), []string{events.PedidoCriado}) {
+		t.Errorf("não deveria publicar pedido.excluido: %v", pub.tipos())
+	}
+}
+
 func TestPedidoEnviadoNaoPodeSerExcluido(t *testing.T) {
 	s, _, _, pedido := novoTeste(t)
 	tratar(t, s, evento(t, events.PedidoEnviado, events.PedidoEnviadoDados{PedidoID: pedido.ID}))
@@ -191,6 +234,7 @@ func TestMenuFazPedido(t *testing.T) {
 	pedidos := NovosPedidos()
 	pub := &gravador{}
 	s := NovoServico(pedidos, pub.publicar, func(string) {})
+	s.janela = time.Hour
 	produtos := []catalogo.Produto{{ID: "P01", Nome: "Fone", Categoria: "A", Preco: 10}}
 	entrada := strings.NewReader("2\np01\n2\nP01\n1\n\n0\n") // P01 duas vezes: soma no mesmo item
 	var saida strings.Builder

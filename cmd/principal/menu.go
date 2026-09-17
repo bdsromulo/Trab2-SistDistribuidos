@@ -116,6 +116,7 @@ func (m *Menu) fazerPedido() {
 		return
 	}
 	fmt.Fprintf(m.saida, "Pedido %s criado, total R$ %.2f. Status: %s\n", pedido.ID, pedido.ValorTotal, pedido.Status)
+	fmt.Fprintf(m.saida, "Você tem %.0f s para cancelar (opção 4) antes de o pedido seguir para o estoque.\n", m.servico.janela.Seconds())
 }
 
 // adicionarItem soma a quantidade se o produto já estiver no pedido.

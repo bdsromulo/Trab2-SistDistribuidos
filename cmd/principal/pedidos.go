@@ -15,19 +15,21 @@ import (
 type Status string
 
 const (
-	StatusAguardandoEstoque Status = "aguardando estoque"
-	StatusAguardandoPagto   Status = "aguardando pagamento" // estoque reservado
-	StatusPago              Status = "pagamento aprovado"
-	StatusEnviado           Status = "enviado"
-	StatusExcluido          Status = "excluído"
+	StatusAguardandoConfirmacao Status = "aguardando confirmação" // janela de cancelamento, nada publicado ainda
+	StatusAguardandoEstoque     Status = "aguardando estoque"
+	StatusAguardandoPagto       Status = "aguardando pagamento" // estoque reservado
+	StatusPago                  Status = "pagamento aprovado"
+	StatusEnviado               Status = "enviado"
+	StatusExcluido              Status = "excluído"
 )
 
 // etapa dá a posição de cada status no fluxo, para impedir que ele volte.
 var etapa = map[Status]int{
-	StatusAguardandoEstoque: 1,
-	StatusAguardandoPagto:   2,
-	StatusPago:              3,
-	StatusEnviado:           4,
+	StatusAguardandoConfirmacao: 1,
+	StatusAguardandoEstoque:     2,
+	StatusAguardandoPagto:       3,
+	StatusPago:                  4,
+	StatusEnviado:               5,
 }
 
 // Pedido guardado pelo Principal.
@@ -45,6 +47,7 @@ type Pedido struct {
 var (
 	ErrPedidoNaoEncontrado = errors.New("pedido não encontrado")
 	ErrPedidoExcluido      = errors.New("pedido já foi excluído")
+	ErrPedidoPago          = errors.New("pagamento já aprovado, o pedido está em entrega e não pode ser excluído")
 	ErrPedidoEnviado       = errors.New("pedido já foi enviado e não pode ser excluído")
 	ErrStatusAntigo        = errors.New("status igual ou anterior ao atual")
 )
@@ -61,7 +64,7 @@ func NovosPedidos() *Pedidos {
 	return &Pedidos{porID: map[string]*Pedido{}}
 }
 
-// Criar registra um pedido novo, aguardando o estoque.
+// Criar registra um pedido novo, aguardando a confirmação.
 func (p *Pedidos) Criar(itens []events.Item) Pedido {
 	total := 0.0
 	for _, it := range itens {
@@ -71,7 +74,7 @@ func (p *Pedidos) Criar(itens []events.Item) Pedido {
 		ID:         uuid.NewString()[:8], // curto, para digitar no menu
 		Itens:      append([]events.Item(nil), itens...),
 		ValorTotal: math.Round(total*100) / 100,
-		Status:     StatusAguardandoEstoque,
+		Status:     StatusAguardandoConfirmacao,
 		CriadoEm:   time.Now(),
 	}
 
@@ -149,6 +152,9 @@ func (p *Pedidos) Excluir(id, motivo, detalhe string) (Pedido, error) {
 	switch pedido.Status {
 	case StatusExcluido:
 		return *pedido, ErrPedidoExcluido
+	case StatusPago:
+		// A Entrega já está emitindo a nota e não consome pedido.excluido.
+		return *pedido, ErrPedidoPago
 	case StatusEnviado:
 		return *pedido, ErrPedidoEnviado
 	}

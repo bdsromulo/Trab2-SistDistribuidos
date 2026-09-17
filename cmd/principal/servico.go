@@ -3,9 +3,15 @@ package main
 import (
 	"errors"
 	"fmt"
+	"sync"
+	"time"
 
 	"github.com/bdsromulo/Trab2-SistDistribuidos/internal/events"
 )
+
+// JanelaCancelamento é quanto tempo um pedido novo espera, só no Principal,
+// antes de pedido.criado ser publicado. Nesse tempo o usuário pode cancelá-lo.
+const JanelaCancelamento = 30 * time.Second
 
 // Servico junta os pedidos e a publicação de eventos. É usado pelo menu
 // (ações do usuário) e pelo consumo da fila.principal (eventos recebidos).
@@ -13,25 +19,45 @@ type Servico struct {
 	pedidos  *Pedidos
 	publicar func(tipo string, dados any) error // assina e publica no RabbitMQ
 	avisar   func(msg string)                   // mostra no terminal as mudanças vindas dos eventos
+	janela   time.Duration                      // janela de cancelamento (os testes trocam)
+
+	// mu não deixa a confirmação e a exclusão do mesmo pedido se misturarem:
+	// sem ele, pedido.excluido poderia ser publicado antes de pedido.criado.
+	mu sync.Mutex
 }
 
 func NovoServico(pedidos *Pedidos, publicar func(string, any) error, avisar func(string)) *Servico {
-	return &Servico{pedidos: pedidos, publicar: publicar, avisar: avisar}
+	return &Servico{pedidos: pedidos, publicar: publicar, avisar: avisar, janela: JanelaCancelamento}
 }
 
-// CriarPedido registra o pedido e publica pedido.criado.
+// CriarPedido registra o pedido e agenda a publicação de pedido.criado para
+// quando a janela de cancelamento terminar.
 func (s *Servico) CriarPedido(itens []events.Item) (Pedido, error) {
 	pedido := s.pedidos.Criar(itens)
-	err := s.publicar(events.PedidoCriado, events.PedidoCriadoDados{
+	time.AfterFunc(s.janela, func() { s.confirmar(pedido.ID) })
+	return pedido, nil
+}
+
+// confirmar encerra a janela de cancelamento: se o pedido não foi excluído,
+// ele passa a aguardar o estoque e pedido.criado é publicado.
+func (s *Servico) confirmar(id string) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	pedido, err := s.pedidos.Avancar(id, StatusAguardandoEstoque, "")
+	if err != nil {
+		return // cancelado durante a janela: ninguém soube do pedido
+	}
+	err = s.publicar(events.PedidoCriado, events.PedidoCriadoDados{
 		PedidoID:   pedido.ID,
 		Itens:      pedido.Itens,
 		ValorTotal: pedido.ValorTotal,
 	})
 	if err != nil {
-		s.pedidos.Remover(pedido.ID) // ninguém soube do pedido, então ele não existe
-		return Pedido{}, err
+		s.pedidos.Remover(id) // ninguém soube do pedido, então ele não existe
+		s.avisar(fmt.Sprintf("Erro ao publicar o pedido %s: %v. Pedido descartado.", id, err))
+		return
 	}
-	return pedido, nil
+	s.avisar(fmt.Sprintf("pedido %s: %s", id, descreverStatus(pedido)))
 }
 
 // ExcluirPeloUsuario exclui o pedido a pedido do usuário e publica pedido.excluido.
@@ -40,10 +66,17 @@ func (s *Servico) ExcluirPeloUsuario(id string) error {
 }
 
 // excluir marca o pedido e, se foi esta chamada que o excluiu, publica
-// pedido.excluido para o Estoque devolver a reserva.
+// pedido.excluido para o Estoque devolver a reserva. Um pedido ainda na
+// janela de cancelamento nunca foi publicado, então não há quem avisar.
 func (s *Servico) excluir(id, motivo, detalhe string) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	antes, _ := s.pedidos.Buscar(id)
 	if _, err := s.pedidos.Excluir(id, motivo, detalhe); err != nil {
 		return err
+	}
+	if antes.Status == StatusAguardandoConfirmacao {
+		return nil
 	}
 	return s.publicar(events.PedidoExcluido, events.PedidoExcluidoDados{PedidoID: id, Motivo: motivo})
 }
@@ -104,7 +137,8 @@ func (s *Servico) TratarEvento(env events.Envelope) error {
 	// Pedido desconhecido, já excluído ou evento repetido: nada a fazer,
 	// mas a mensagem foi entendida, então não é erro.
 	if errors.Is(err, ErrPedidoNaoEncontrado) || errors.Is(err, ErrPedidoExcluido) ||
-		errors.Is(err, ErrStatusAntigo) || errors.Is(err, ErrPedidoEnviado) {
+		errors.Is(err, ErrStatusAntigo) || errors.Is(err, ErrPedidoPago) ||
+		errors.Is(err, ErrPedidoEnviado) {
 		s.avisar(fmt.Sprintf("%s do pedido %s ignorado: %v", env.EventType, pedidoID, err))
 		return nil
 	}

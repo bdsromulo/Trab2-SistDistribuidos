@@ -112,7 +112,8 @@ Cada serviço fala com o RabbitMQ diretamente pelo `amqp091-go`: declara a excha
 - O envelope tem `event_id`, `event_type`, `producer`, `occurred_at` (UTC), `data` e `Signature` (ver `internal/events`).
 - O `event_type` é sempre igual à routing key.
 - Cada tipo de evento tem um único produtor (tabela `events.ProdutorDoEvento`, igual à Figura 1 do enunciado).
-- Motivos de `pedido.excluido`: `usuario`, `falta_estoque` e `pagamento_recusado`. Ele é publicado no máximo uma vez por pedido, e um pedido já enviado não pode ser excluído.
+- Motivos de `pedido.excluido`: `usuario`, `falta_estoque` e `pagamento_recusado`. Ele é publicado no máximo uma vez por pedido, e o usuário não pode excluir um pedido com pagamento aprovado ou já enviado (a Entrega não consome `pedido.excluido`).
+- Janela de cancelamento: o pedido novo fica 30 s em "aguardando confirmação" só no Principal, antes de `pedido.criado` ser publicado. Cancelado nesse tempo, ele é excluído sem publicar nada, porque nenhum outro serviço soube dele.
 
 **Assinatura** (`internal/signature`)
 
@@ -140,7 +141,7 @@ Cada serviço fala com o RabbitMQ diretamente pelo `amqp091-go`: declara a excha
 - O status de um pedido nunca volta, e eventos de pedidos já excluídos são ignorados.
 - Pagamento: aprovação aleatória em cerca de 80% dos casos.
 - Entrega: atraso de 1 a 3 s, número de nota fiscal e código de rastreio aleatórios.
-- Promoções: a cada 5 a 10 s, um produto do catálogo com 5% a 50% de desconto.
+- Promoções: a cada 20 a 30 s, um produto do catálogo com 5% a 50% de desconto.
 
 ## Repositório
 
