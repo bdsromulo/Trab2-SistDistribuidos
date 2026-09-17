@@ -196,7 +196,7 @@ func main() {
 		}
 	}()
 
-	log.Printf("Aguardando eventos de pedidos...")
+	log.Printf(" [*] Aguardando eventos de pedidos...")
 
 	<-forever
 }
