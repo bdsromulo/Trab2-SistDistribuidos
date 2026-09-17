@@ -123,6 +123,7 @@ func main() {
 							Body:         []byte(body_json),
 						})
 					u.FailOnError(err, "Erro ao publicar o evento de pagamento aprovado")
+					log.Printf("Pagamento aprovado para o pedido %s (R$ %.2f)", data.PedidoID, data.ValorTotal)
 				} else {
 					var data e.PedidoEstoqueOKDados
 					err = env.Decodificar(&data)
@@ -157,6 +158,8 @@ func main() {
 							Body:         []byte(body_json),
 						})
 					u.FailOnError(err, "Erro ao publicar o evento de pagamento recusado")
+					log.Printf("Pagamento recusado para o pedido %s", data.PedidoID)
+
 				}
 			} else {
 				log.Printf("Tipo de evento (%s) não suportado no MS Pagamento. Evento descartado.", env.EventType)
