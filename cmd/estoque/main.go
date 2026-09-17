@@ -7,9 +7,10 @@ import (
 	"time"
 
 	e "github.com/bdsromulo/Trab2-SistDistribuidos/internal/events"
+	s "github.com/bdsromulo/Trab2-SistDistribuidos/internal/signature"
 	u "github.com/bdsromulo/Trab2-SistDistribuidos/internal/utils"
-	amqp "github.com/rabbitmq/amqp091-go"
 	uuid "github.com/google/uuid"
+	amqp "github.com/rabbitmq/amqp091-go"
 )
 
 func main() {
@@ -56,6 +57,14 @@ func main() {
 		u.FailOnError(err, e)
 	}
 
+	pk := s.LoadPrivateKey("cmd/estoque/keys/private_key.pem")
+	if pk == nil {
+		log.Fatal("Chave privada não encontrada em cmd/estoque/keys/private_key.pem. " +
+			"Gere as chaves uma única vez com: go run ./cmd/gerar-chaves")
+	}
+
+	pub_key_ms_p := s.LoadPublicKey("cmd/estoque/principal-pub/public_key.pem")
+
 	events, err := ch.Consume(
 		"fila.estoque",
 		"MS_Estoque",
@@ -74,9 +83,14 @@ func main() {
 	reservas := make(map[string][]e.Item)
 
 	go func() {
-		estoque_ok := true
 		for d := range events {
+			estoque_ok := true
 			err = json.Unmarshal(d.Body, &env)
+			if !s.VerifySignature(pub_key_ms_p, string(env.Data), []byte(env.Signature)) {
+				log.Printf("Assinatura inválida do evento %s. Evento descartado.", env.EventType)
+				d.Ack(false)
+				continue
+			}
 			if env.EventType == e.PedidoCriado {
 				var data e.PedidoCriadoDados
 				err = env.Decodificar(&data)
@@ -87,11 +101,9 @@ func main() {
 						est.Produtos[i.ProdutoID].Availability -= i.Quantidade
 						itensReservados = append(itensReservados, i)
 						log.Printf("Reservando %d unidades do produto %s para o pedido %s", i.Quantidade, i.ProdutoID, data.PedidoID)
-						// publicar evento de estoque OK
 					} else {
 						log.Printf("Estoque insuficiente para o produto %s do pedido %s", i.ProdutoID, data.PedidoID)
 						estoque_ok = false
-						// publicar evento de estoque indisponível
 						break
 					}
 				}
@@ -106,10 +118,10 @@ func main() {
 					body := e.Envelope{
 						EventID:    uuid.NewString(),
 						EventType:  e.PedidoEstoqueOK,
-						Producer:   e.ProdutorDoEvento[e.PedidoEstoqueOK ],
+						Producer:   e.ProdutorDoEvento[e.PedidoEstoqueOK],
 						OccurredAt: time.Now().UTC().Truncate(time.Millisecond),
 						Data:       p_json,
-						Signature: "",
+						Signature:  string(s.SignPayload(pk, string(p_json))),
 					}
 
 					body_json, err := json.Marshal(body)
@@ -129,7 +141,7 @@ func main() {
 						})
 					u.FailOnError(err, "Erro ao publicar o evento de pedido estoque OK")
 				} else {
-					p_ind := e.EstoqueIndisponivelDados {
+					p_ind := e.EstoqueIndisponivelDados{
 						PedidoID: data.PedidoID,
 					}
 					p_json, err := json.Marshal(p_ind)
@@ -141,7 +153,7 @@ func main() {
 						Producer:   e.ProdutorDoEvento[e.EstoqueIndisponivel],
 						OccurredAt: time.Now().UTC().Truncate(time.Millisecond),
 						Data:       p_json,
-						Signature: "",
+						Signature:  string(s.SignPayload(pk, string(p_json))),
 					}
 					body_json, err := json.Marshal(body)
 					u.FailOnError(err, "Erro ao serializar o envelope do pedido estoque indisponível")

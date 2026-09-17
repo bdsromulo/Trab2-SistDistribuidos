@@ -6,13 +6,14 @@ import (
 	"crypto/rsa"
 	"crypto/sha256"
 	"crypto/x509"
+	"encoding/base64"
 	"encoding/pem"
 	"fmt"
 	"log"
 	"os"
 )
 
-func GenerateKeys() *rsa.PrivateKey {
+func GenerateKey() *rsa.PrivateKey {
 	private_key, err := rsa.GenerateKey(rand.Reader, 2048)
 	if err != nil {
 		log.Panicf("Erro ao gerar chave privada: %s", err)
@@ -32,81 +33,91 @@ func SignPayload(private_key *rsa.PrivateKey, content string) []byte {
 		log.Panicf("Erro ao assinar o payload: %s", err)
 	}
 	return signature
-	//log.Printf("Assinatura do payload: %x", signature)
 }
 
 func VerifySignature(public_key *rsa.PublicKey, content string, signature []byte) bool {
-	h := BuildPayloadHash([]byte(content))
-	err := rsa.VerifyPKCS1v15(public_key, crypto.SHA256, h[:], signature)
+	raw_sig, err := base64.StdEncoding.DecodeString(string(signature))
 	if err != nil {
 		return false
 	}
-	return true
+	h := BuildPayloadHash([]byte(content))
+	err = rsa.VerifyPKCS1v15(public_key, crypto.SHA256, h[:], raw_sig)
+	return err == nil
 }
 
 func PersistKeys(private_key *rsa.PrivateKey, servicoNome string) {
 	pub_key := &private_key.PublicKey
 
-	os.RemoveAll("key")
-	os.MkdirAll("key", 0755)
+	dir_path := fmt.Sprintf("cmd/%s/keys", servicoNome)
+	os.MkdirAll(dir_path, 0755)
 
-	priv_file, err := os.Create("key/private_key.pem")
+	priv_file, err := os.Create(dir_path + "/private_key.pem")
 	if err != nil {
 		log.Panicf("Erro ao criar arquivo de chave privada: %s", err)
 	}
-	defer priv_file.Close()
-
 	pem.Encode(priv_file, &pem.Block{
 		Type:  "RSA PRIVATE KEY",
 		Bytes: x509.MarshalPKCS1PrivateKey(private_key),
 	})
+	priv_file.Close()
 
-	pub_file, err := os.Create("public_key.pem")
+	pub_file, err := os.Create(dir_path + "/public_key.pem")
 	if err != nil {
 		log.Panicf("Erro ao criar arquivo de chave pública: %s", err)
 	}
-	defer pub_file.Close()
-
 	pem.Encode(pub_file, &pem.Block{
 		Type:  "RSA PUBLIC KEY",
 		Bytes: x509.MarshalPKCS1PublicKey(pub_key),
 	})
+	pub_file.Close()
 
 	microservicos := []string{"entrega", "estoque", "pagamento", "principal", "promocoes"}
 	for _, ms := range microservicos {
-		dirPath := fmt.Sprintf("../../cmd/%s/%s-pub", ms, servicoNome)
-		os.RemoveAll(dirPath)
-		err := os.MkdirAll(dirPath, 0755)
-		if err != nil {
-			log.Panicf("Erro ao criar diretório para chave pública do serviço %s: %s", ms, err)
-		}
+		if ms != servicoNome {
+			pub_dir := fmt.Sprintf("cmd/%s/%s-pub", ms, servicoNome)
+			os.MkdirAll(pub_dir, 0755)
 
-		pub_dest := fmt.Sprintf("%s/public_key.pem", dirPath)
-		pub_dest_file, err := os.Create(pub_dest)
-		if err != nil {
-			log.Panicf("Erro ao criar arquivo de chave pública no serviço %s: %s", ms, err)
+			pub_dest_file, err := os.Create(pub_dir + "/public_key.pem")
+			if err != nil {
+				log.Panicf("Erro ao criar arquivo de chave pública no serviço %s: %s", ms, err)
+			}
+			pem.Encode(pub_dest_file, &pem.Block{
+				Type:  "RSA PUBLIC KEY",
+				Bytes: x509.MarshalPKCS1PublicKey(pub_key),
+			})
+			pub_dest_file.Close()
+			log.Printf("Chave pública distribuída para %s", ms)
 		}
-		defer pub_dest_file.Close()
-
-		pem.Encode(pub_dest_file, &pem.Block{
-			Type:  "RSA PUBLIC KEY",
-			Bytes: x509.MarshalPKCS1PublicKey(pub_key),
-		})
-		log.Printf("Chave pública distribuída para %s", ms)
 	}
 }
 
-func ReadPubKeyFromFile(path string) *rsa.PublicKey {
-	data, _ := os.ReadFile(path)
-	block, _ := pem.Decode(data)
-	if block == nil || block.Type != "RSA PUBLIC KEY" {
+func LoadPublicKey(path string) *rsa.PublicKey {
+	pem_data, _ := os.ReadFile(path)
+	pem_block, _ := pem.Decode(pem_data)
+	if pem_block == nil || pem_block.Type != "RSA PUBLIC KEY" {
 		log.Panicf("Erro ao decodificar chave pública do arquivo: %s", path)
 	}
-	pub, err := x509.ParsePKCS1PublicKey(block.Bytes)
+	public_key, err := x509.ParsePKCS1PublicKey(pem_block.Bytes)
 	if err != nil {
 		log.Panicf("Erro ao parsear a chave pública do arquivo: %s", err)
 	}
-	return pub
+	return public_key
+}
+
+func LoadPrivateKey(path string) *rsa.PrivateKey {
+	pem_data, err := os.ReadFile(path)
+	if err != nil {
+		return nil
+	}
+	pem_block, _ := pem.Decode(pem_data)
+	if pem_block == nil || pem_block.Type != "RSA PRIVATE KEY" {
+		return nil
+	}
+	private_key, err := x509.ParsePKCS1PrivateKey(pem_block.Bytes)
+	if err != nil {
+		return nil
+	}
+	return private_key
 }
 
 func PrintfPrivateKey(private_key *rsa.PrivateKey) {
