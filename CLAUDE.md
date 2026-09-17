@@ -14,6 +14,8 @@ Em especial, e sem exceção:
 - Mensagens de commit descrevem apenas a alteração feita, em português, de
   forma objetiva.
 - Não commitar nem dar `push` sem pedido explícito do responsável humano.
+- **Nunca** alterar o código do Kauan (lista em `AGENTS.md`, seção "Código do
+  Kauan: não alterar"). O restante do projeto se adapta ao código dele.
 
 O hook `.githooks/commit-msg` remove essas linhas automaticamente. Não
 contorná-lo com `--no-verify`.

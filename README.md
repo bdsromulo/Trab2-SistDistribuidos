@@ -2,11 +2,9 @@
 
 Backend distribuído de um sistema de e-commerce, desenvolvido em Go, com microsserviços orientados a eventos, RabbitMQ e assinatura digital assimétrica.
 
-> Status: base comum criada (módulo Go, contrato dos eventos e implementações provisórias). Os serviços ainda estão sendo implementados.
-
 ## Objetivo
 
-O sistema deverá gerenciar pedidos, estoque, pagamentos, entregas e promoções por meio de processos independentes. Não serão permitidas chamadas diretas entre os processos: toda comunicação deverá ocorrer por eventos publicados e consumidos no RabbitMQ.
+O sistema gerencia pedidos, estoque, pagamentos, entregas e promoções por meio de processos independentes. Não há chamadas diretas entre os processos: toda comunicação ocorre por eventos publicados e consumidos no RabbitMQ.
 
 O trabalho prevê:
 
@@ -24,39 +22,60 @@ O uso de exchange do tipo `fanout` é proibido.
 
 - [Tutorial oficial do RabbitMQ para Go](https://www.rabbitmq.com/tutorials/tutorial-one-go)
 
-Para este trabalho, devem ser estudados principalmente os tutoriais 1, 2, 3 e 4 na versão para Go. O tutorial 3 ajuda a compreender publish/subscribe e bindings, mas seu exemplo usa `fanout`, que não pode ser utilizada na solução. A implementação deverá usar `direct` para os eventos do e-commerce e `topic` para promoções.
+Para este trabalho, devem ser estudados principalmente os tutoriais 1, 2, 3 e 4 na versão para Go. O tutorial 3 ajuda a compreender publish/subscribe e bindings, mas seu exemplo usa `fanout`, que não pode ser utilizada na solução. A implementação usa `direct` para os eventos do e-commerce e `topic` para promoções.
 
 ## Execução
 
-### Chaves
+Todos os comandos rodam **a partir da raiz do repositório**: os caminhos das chaves e de `data/` são relativos a ela.
 
-Cada processo assina o que publica e confere o que consome. Antes de subir os
-serviços, é preciso ter as chaves no lugar:
+### 1. RabbitMQ
+
+```bash
+docker compose up -d
+```
+
+Painel em http://localhost:15672 (usuário e senha `ecommerce`).
+
+### 2. Chaves
+
+Uma única vez, antes de subir os serviços:
+
+```bash
+go run ./cmd/gerar-chaves
+```
+
+Ele gera um par RSA-2048 para cada microsserviço e distribui as públicas:
 
 | Arquivo | Caminho |
 |---|---|
-| Privada do próprio processo | `cmd/<processo>/key/private_key.pem` |
-| Pública de cada produtor | `cmd/<processo>/<produtor>-pub/public_key.pem` |
+| Par do próprio serviço | `cmd/<ms>/keys/private_key.pem` e `cmd/<ms>/keys/public_key.pem` |
+| Pública de cada outro serviço | `cmd/<ms>/<produtor>-pub/public_key.pem` |
 
-Os produtores são `principal`, `estoque`, `pagamento`, `entrega` e `promocoes`.
-As privadas não são versionadas (`.gitignore`).
+Nenhum `.pem` é versionado (`.gitignore`). Rodar o `gerar-chaves` de novo troca todos os pares, então os serviços precisam ser reiniciados depois.
 
-Um serviço que não encontrar as chaves **não sobe**, e diz qual arquivo faltou.
-É proposital: assinatura desligada em silêncio esconderia justamente o que o
-trabalho precisa demonstrar.
+### 3. Serviços
 
-> O `cmd/gerar-chaves` ainda não produz esse layout — hoje ele gera um único
-> par e distribui a pública sob o nome `gerar-chaves-pub`. Enquanto isso não
-> for ajustado, o layout acima é montado à mão para testar.
-
-### Serviços
-
-A definir conforme os processos forem ficando prontos. Um terminal por
-processo, a partir da raiz do repositório:
+Um terminal por processo:
 
 ```bash
+go run ./cmd/estoque
+go run ./cmd/pagamento
+go run ./cmd/entrega
+go run ./cmd/promocoes
+go run ./cmd/c1
+go run ./cmd/c2
 go run ./cmd/principal
 ```
+
+### 4. Demonstração do descarte
+
+Com os serviços no ar:
+
+```bash
+go run ./cmd/adulterador
+```
+
+Ele publica, para `pedido.criado` e para `pagamento.aprovado`, três mensagens inválidas: sem assinatura, assinada com uma chave desconhecida e assinada pelo produtor verdadeiro com o `data` alterado depois. O Estoque, a Entrega e o Principal mostram "Assinatura inválida ... Evento descartado" para cada uma.
 
 ## Estrutura do projeto
 
@@ -64,25 +83,25 @@ go run ./cmd/principal
 .
 |-- cmd/                    um processo por pasta (go run ./cmd/<nome>)
 |   |-- principal/          menu no terminal, pedidos e status
-|   |-- estoque/
-|   |-- pagamento/
-|   |-- entrega/
-|   |-- promocoes/
+|   |-- estoque/            reserva e devolução de itens
+|   |-- pagamento/          aprova ou recusa pagamentos
+|   |-- entrega/            emite a nota fiscal e envia o pedido
+|   |-- promocoes/          publica promoções aleatórias
 |   |-- c1/                 consumidor de promoções A e B
 |   |-- c2/                 consumidor de todas as promoções
-|   |-- gerar-chaves/       gera as chaves RSA de cada produtor
+|   |-- gerar-chaves/       gera e distribui as chaves RSA dos serviços
 |   `-- adulterador/        publica mensagens inválidas (demonstração)
 |-- internal/
 |   |-- events/             contrato: envelope, tipos de evento e dados
-|   |-- security/           assinatura e verificação (Signer, Verifier)
-|   |-- messaging/          RabbitMQ: nomes, publicação e consumo (Publisher)
+|   |-- signature/          chaves, assinatura e verificação (RSA)
+|   |-- utils/              FailOnError
 |   `-- catalogo/           leitura do catálogo de produtos
 |-- data/catalogo.json      catálogo somente leitura (sem quantidades)
-|-- .env.example            modelo do .env com a conexão do RabbitMQ
+|-- data/estoque.json       estoque inicial do Estoque
 `-- go.mod
 ```
 
-Enquanto a assinatura e o publicador reais não existem, os serviços usam as implementações falsas `security.FakeSigner`, `security.FakeVerifier` e `messaging.FakePublisher`.
+Cada serviço fala com o RabbitMQ diretamente pelo `amqp091-go`: declara a exchange, a própria fila e os bindings, consome e publica.
 
 ## Regras combinadas
 
@@ -93,17 +112,16 @@ Enquanto a assinatura e o publicador reais não existem, os serviços usam as im
 - Cada tipo de evento tem um único produtor (tabela `events.ProdutorDoEvento`, igual à Figura 1 do enunciado).
 - Motivos de `pedido.excluido`: `usuario`, `falta_estoque` e `pagamento_recusado`. Ele é publicado no máximo uma vez por pedido, e um pedido já enviado não pode ser excluído.
 
-**Assinatura**
+**Assinatura** (`internal/signature`)
 
-- A assinatura cobre todos os campos do envelope, exceto `Signature`: hash SHA-256, assinado com a chave privada do produtor (RSA-2048, PKCS#1 v1.5) e gravado em base64.
-- O consumidor escolhe a chave pública pelo campo `producer`. Mensagem sem assinatura, adulterada, de produtor desconhecido ou com evento que não pertence ao produtor é descartada.
-- As chaves privadas nunca vão para o Git; cada um gera as suas na própria máquina com `go run ./cmd/gerar-chaves`.
+- O produtor assina o campo `data` do envelope: hash SHA-256 dos bytes do JSON, assinado com a chave privada dele (RSA-2048, PKCS#1 v1.5) e gravado em base64 em `Signature` (`SignPayload`).
+- O consumidor carrega na partida a chave pública de cada produtor de quem recebe eventos e confere com `VerifySignature` antes de processar. Mensagem sem assinatura, com assinatura inválida ou com o `data` alterado é descartada (recebe ack e não é processada).
+- C1 e C2 não são microsserviços e não recebem cópia da pública do Promoções: leem `cmd/promocoes/keys/public_key.pem`.
 
 **RabbitMQ**
 
 - Exchanges `eCommerce` (direct) e `Promocoes` (topic, sem acento). Não há exchange fanout.
-- Cada consumidor declara a própria fila e os próprios bindings. Filas duráveis e mensagens persistentes.
-- Uma mensagem por vez, com ack manual depois de processar. Mensagem inválida ou com erro é descartada sem voltar para a fila.
+- Cada consumidor declara a própria fila e os próprios bindings. Filas duráveis e mensagens persistentes, com ack manual.
 
 | Fila | Routing keys |
 |---|---|
@@ -116,12 +134,12 @@ Enquanto a assinatura e o publicador reais não existem, os serviços usam as im
 
 **Serviços**
 
-- Pedidos (Principal) e estoque (Estoque) ficam em memória. O catálogo não tem quantidades; o estoque inicial vem de um JSON próprio do Estoque.
+- Pedidos (Principal) e estoque (Estoque) ficam em memória. O catálogo não tem quantidades; o estoque inicial vem de `data/estoque.json`.
 - O status de um pedido nunca volta, e eventos de pedidos já excluídos são ignorados.
-- Pagamento: 80% de aprovação, com atraso de 1 a 3 s. Entrega: atraso de 1 a 3 s.
+- Pagamento: aprovação aleatória em cerca de 80% dos casos.
+- Entrega: atraso de 1 a 3 s, número de nota fiscal e código de rastreio aleatórios.
 - Promoções: a cada 5 a 10 s, um produto do catálogo com 5% a 50% de desconto.
 
 ## Repositório
 
 [bdsromulo/Trab2-SistDistribuidos](https://github.com/bdsromulo/Trab2-SistDistribuidos)
-

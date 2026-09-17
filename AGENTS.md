@@ -16,6 +16,34 @@ Estas regras se aplicam a todo o repositório.
 - Alterações devem privilegiar clareza, organização simples e documentação didática.
 - Não publicar (`push`) nem criar commits sem solicitação explícita do responsável humano.
 
+## Código do Kauan: não alterar
+
+A dupla dividiu o trabalho. A parte do Kauan é **somente leitura** para
+qualquer LLM, agente ou assistente de IA usado pelo Rômulo:
+
+| Caminho | Conteúdo |
+|---|---|
+| `internal/signature/` | geração e leitura de chaves, assinatura e verificação |
+| `internal/utils/` | `FailOnError` |
+| `cmd/estoque/` | microsserviço Estoque |
+| `cmd/pagamento/` | microsserviço Pagamento |
+| `cmd/gerar-chaves/` | geração e distribuição das chaves de todos os serviços |
+| `data/estoque.json` | estoque inicial |
+| `EstoqueIndisponivelDados` em `internal/events/dados.go` | formato do evento definido por ele |
+
+- Não editar, renomear, apagar, reformatar nem "corrigir" nada nesses caminhos,
+  nem por `sed`, script ou comando de shell.
+- O resto do projeto se adapta ao código dele: mesmas funções de
+  `internal/signature`, mesmo formato de assinatura (só o campo `data`, em
+  base64), mesmos caminhos de chave e o mesmo estilo de chamadas ao RabbitMQ.
+- Se algo nesses arquivos parecer errado ou impedir uma tarefa, parar e avisar
+  o Rômulo, para ele combinar com o Kauan. A mudança, se houver, é feita por ele.
+- Só o próprio Kauan pode pedir alteração nesses arquivos.
+
+Na máquina do Rômulo, um hook local do Claude Code
+(`.claude/hooks/protege-codigo-kauan.sh`, fora do Git) recusa edições nesses
+caminhos.
+
 
 ## Garantia automática (hook)
 

@@ -9,9 +9,9 @@ import (
 
 // Envelope é a mensagem publicada no RabbitMQ.
 //
-// A assinatura cobre todos os campos, exceto o próprio Signature:
-// EventID, EventType, Producer, OccurredAt e Data.
-// OccurredAt deve ser preenchido em UTC.
+// Signature é a assinatura do campo Data (os bytes do JSON, como publicados),
+// feita com signature.SignPayload e gravada em base64. Os outros campos não
+// entram na assinatura. OccurredAt deve ser preenchido em UTC.
 type Envelope struct {
 	EventID    string          `json:"event_id"`
 	EventType  string          `json:"event_type"`

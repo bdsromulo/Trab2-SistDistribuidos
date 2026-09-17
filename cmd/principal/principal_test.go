@@ -1,7 +1,6 @@
 package main
 
 import (
-	"context"
 	"encoding/json"
 	"errors"
 	"slices"
@@ -10,7 +9,6 @@ import (
 
 	"github.com/bdsromulo/Trab2-SistDistribuidos/internal/catalogo"
 	"github.com/bdsromulo/Trab2-SistDistribuidos/internal/events"
-	"github.com/bdsromulo/Trab2-SistDistribuidos/internal/messaging"
 )
 
 var itensTeste = []events.Item{
@@ -18,12 +16,36 @@ var itensTeste = []events.Item{
 	{ProdutoID: "P06", Nome: "Caderno", Quantidade: 1, PrecoUnitario: 24.90},
 }
 
-func novoTeste(t *testing.T) (*Servico, *Pedidos, *messaging.FakePublisher, Pedido) {
+// publicado é um evento que o serviço mandou publicar durante o teste.
+type publicado struct {
+	tipo  string
+	dados any
+}
+
+// gravador substitui o RabbitMQ nos testes: só anota o que foi publicado.
+type gravador struct {
+	publicados []publicado
+}
+
+func (g *gravador) publicar(tipo string, dados any) error {
+	g.publicados = append(g.publicados, publicado{tipo, dados})
+	return nil
+}
+
+func (g *gravador) tipos() []string {
+	tipos := make([]string, len(g.publicados))
+	for i, p := range g.publicados {
+		tipos[i] = p.tipo
+	}
+	return tipos
+}
+
+func novoTeste(t *testing.T) (*Servico, *Pedidos, *gravador, Pedido) {
 	t.Helper()
 	pedidos := NovosPedidos()
-	pub := &messaging.FakePublisher{}
-	s := NovoServico(pedidos, pub, func(string) {})
-	pedido, err := s.CriarPedido(context.Background(), itensTeste)
+	pub := &gravador{}
+	s := NovoServico(pedidos, pub.publicar, func(string) {})
+	pedido, err := s.CriarPedido(itensTeste)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -42,7 +64,7 @@ func evento(t *testing.T, tipo string, dados any) events.Envelope {
 
 func tratar(t *testing.T, s *Servico, env events.Envelope) {
 	t.Helper()
-	if err := s.TratarEvento(context.Background(), env); err != nil {
+	if err := s.TratarEvento(env); err != nil {
 		t.Fatalf("TratarEvento(%s): %v", env.EventType, err)
 	}
 }
@@ -62,11 +84,10 @@ func TestCriarPedidoPublicaPedidoCriado(t *testing.T) {
 	if pedido.ValorTotal != 424.70 || pedido.Status != StatusAguardandoEstoque {
 		t.Errorf("pedido criado errado: %+v", pedido)
 	}
-	publicados := pub.Publicados()
-	if len(publicados) != 1 || publicados[0].EventType != events.PedidoCriado {
-		t.Fatalf("publicados = %v", pub.Tipos())
+	if len(pub.publicados) != 1 || pub.publicados[0].tipo != events.PedidoCriado {
+		t.Fatalf("publicados = %v", pub.tipos())
 	}
-	d := publicados[0].Data.(events.PedidoCriadoDados)
+	d := pub.publicados[0].dados.(events.PedidoCriadoDados)
 	if d.PedidoID != pedido.ID || d.ValorTotal != 424.70 || len(d.Itens) != 2 {
 		t.Errorf("dados de pedido.criado errados: %+v", d)
 	}
@@ -85,8 +106,8 @@ func TestFluxoFeliz(t *testing.T) {
 	if got := status(t, pedidos, id); got != StatusEnviado {
 		t.Errorf("no fim: %s", got)
 	}
-	if !slices.Equal(pub.Tipos(), []string{events.PedidoCriado}) {
-		t.Errorf("fluxo feliz não deveria publicar nada além de pedido.criado: %v", pub.Tipos())
+	if !slices.Equal(pub.tipos(), []string{events.PedidoCriado}) {
+		t.Errorf("fluxo feliz não deveria publicar nada além de pedido.criado: %v", pub.tipos())
 	}
 }
 
@@ -104,18 +125,15 @@ func TestStatusNaoVolta(t *testing.T) {
 func TestEstoqueIndisponivelExcluiPedido(t *testing.T) {
 	s, pedidos, pub, pedido := novoTeste(t)
 
-	tratar(t, s, evento(t, events.EstoqueIndisponivel, events.EstoqueIndisponivelDados{
-		PedidoID:       pedido.ID,
-		ItensFaltantes: []events.ItemFaltante{{ProdutoID: "P01", Solicitado: 2, Disponivel: 0}},
-	}))
+	tratar(t, s, evento(t, events.EstoqueIndisponivel, events.EstoqueIndisponivelDados{PedidoID: pedido.ID}))
 
 	p, _ := pedidos.Buscar(pedido.ID)
-	if p.Status != StatusExcluido || p.Motivo != events.MotivoFaltaEstoque || !strings.Contains(p.Detalhe, "P01") {
+	if p.Status != StatusExcluido || p.Motivo != events.MotivoFaltaEstoque {
 		t.Errorf("pedido depois da falta de estoque: %+v", p)
 	}
-	ultimo := pub.Publicados()[len(pub.Publicados())-1]
-	if ultimo.EventType != events.PedidoExcluido ||
-		ultimo.Data.(events.PedidoExcluidoDados).Motivo != events.MotivoFaltaEstoque {
+	ultimo := pub.publicados[len(pub.publicados)-1]
+	if ultimo.tipo != events.PedidoExcluido ||
+		ultimo.dados.(events.PedidoExcluidoDados).Motivo != events.MotivoFaltaEstoque {
 		t.Errorf("esperava pedido.excluido por falta de estoque, publicou %+v", ultimo)
 	}
 }
@@ -130,28 +148,27 @@ func TestPagamentoRecusadoPublicaExclusaoUmaVez(t *testing.T) {
 	if got := status(t, pedidos, pedido.ID); got != StatusExcluido {
 		t.Errorf("status: %s", got)
 	}
-	if !slices.Equal(pub.Tipos(), []string{events.PedidoCriado, events.PedidoExcluido}) {
-		t.Errorf("publicados = %v", pub.Tipos())
+	if !slices.Equal(pub.tipos(), []string{events.PedidoCriado, events.PedidoExcluido}) {
+		t.Errorf("publicados = %v", pub.tipos())
 	}
 }
 
 func TestExclusaoPeloUsuario(t *testing.T) {
 	s, _, pub, pedido := novoTeste(t)
-	ctx := context.Background()
 
-	if err := s.ExcluirPeloUsuario(ctx, pedido.ID); err != nil {
+	if err := s.ExcluirPeloUsuario(pedido.ID); err != nil {
 		t.Fatal(err)
 	}
-	if err := s.ExcluirPeloUsuario(ctx, pedido.ID); !errors.Is(err, ErrPedidoExcluido) {
+	if err := s.ExcluirPeloUsuario(pedido.ID); !errors.Is(err, ErrPedidoExcluido) {
 		t.Errorf("segunda exclusão: %v", err)
 	}
 	// Evento atrasado de um pedido já excluído é ignorado sem publicar nada.
 	tratar(t, s, evento(t, events.PagamentoRecusado, events.PagamentoRecusadoDados{PedidoID: pedido.ID}))
 
-	if !slices.Equal(pub.Tipos(), []string{events.PedidoCriado, events.PedidoExcluido}) {
-		t.Errorf("publicados = %v", pub.Tipos())
+	if !slices.Equal(pub.tipos(), []string{events.PedidoCriado, events.PedidoExcluido}) {
+		t.Errorf("publicados = %v", pub.tipos())
 	}
-	if d := pub.Publicados()[1].Data.(events.PedidoExcluidoDados); d.Motivo != events.MotivoUsuario {
+	if d := pub.publicados[1].dados.(events.PedidoExcluidoDados); d.Motivo != events.MotivoUsuario {
 		t.Errorf("motivo = %q", d.Motivo)
 	}
 }
@@ -160,7 +177,7 @@ func TestPedidoEnviadoNaoPodeSerExcluido(t *testing.T) {
 	s, _, _, pedido := novoTeste(t)
 	tratar(t, s, evento(t, events.PedidoEnviado, events.PedidoEnviadoDados{PedidoID: pedido.ID}))
 
-	if err := s.ExcluirPeloUsuario(context.Background(), pedido.ID); !errors.Is(err, ErrPedidoEnviado) {
+	if err := s.ExcluirPeloUsuario(pedido.ID); !errors.Is(err, ErrPedidoEnviado) {
 		t.Errorf("esperava ErrPedidoEnviado, veio %v", err)
 	}
 }
@@ -172,13 +189,13 @@ func TestEventoDePedidoDesconhecidoEIgnorado(t *testing.T) {
 
 func TestMenuFazPedido(t *testing.T) {
 	pedidos := NovosPedidos()
-	pub := &messaging.FakePublisher{}
-	s := NovoServico(pedidos, pub, func(string) {})
+	pub := &gravador{}
+	s := NovoServico(pedidos, pub.publicar, func(string) {})
 	produtos := []catalogo.Produto{{ID: "P01", Nome: "Fone", Categoria: "A", Preco: 10}}
 	entrada := strings.NewReader("2\np01\n2\nP01\n1\n\n0\n") // P01 duas vezes: soma no mesmo item
 	var saida strings.Builder
 
-	NovoMenu(s, pedidos, produtos, entrada, &saida).Executar(context.Background())
+	NovoMenu(s, pedidos, produtos, entrada, &saida).Executar()
 
 	lista := pedidos.Listar()
 	if len(lista) != 1 || len(lista[0].Itens) != 1 || lista[0].Itens[0].Quantidade != 3 || lista[0].ValorTotal != 30 {

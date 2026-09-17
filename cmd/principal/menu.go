@@ -2,7 +2,6 @@ package main
 
 import (
 	"bufio"
-	"context"
 	"fmt"
 	"io"
 	"strconv"
@@ -26,7 +25,7 @@ func NovoMenu(servico *Servico, pedidos *Pedidos, produtos []catalogo.Produto, e
 }
 
 // Executar mostra o menu até o usuário escolher sair (ou a entrada acabar).
-func (m *Menu) Executar(ctx context.Context) {
+func (m *Menu) Executar() {
 	for {
 		fmt.Fprintln(m.saida, "\n===== E-commerce =====")
 		fmt.Fprintln(m.saida, "1) Ver produtos")
@@ -43,11 +42,11 @@ func (m *Menu) Executar(ctx context.Context) {
 		case "1":
 			m.mostrarProdutos()
 		case "2":
-			m.fazerPedido(ctx)
+			m.fazerPedido()
 		case "3":
 			m.mostrarPedidos()
 		case "4":
-			m.excluirPedido(ctx)
+			m.excluirPedido()
 		case "0":
 			return
 		default:
@@ -81,7 +80,7 @@ func (m *Menu) buscarProduto(codigo string) (catalogo.Produto, bool) {
 	return catalogo.Produto{}, false
 }
 
-func (m *Menu) fazerPedido(ctx context.Context) {
+func (m *Menu) fazerPedido() {
 	m.mostrarProdutos()
 	var itens []events.Item
 	for {
@@ -111,7 +110,7 @@ func (m *Menu) fazerPedido(ctx context.Context) {
 		fmt.Fprintln(m.saida, "Pedido vazio, nada foi feito.")
 		return
 	}
-	pedido, err := m.servico.CriarPedido(ctx, itens)
+	pedido, err := m.servico.CriarPedido(itens)
 	if err != nil {
 		fmt.Fprintf(m.saida, "Erro ao criar o pedido: %v\n", err)
 		return
@@ -150,12 +149,12 @@ func (m *Menu) mostrarPedidos() {
 	}
 }
 
-func (m *Menu) excluirPedido(ctx context.Context) {
+func (m *Menu) excluirPedido() {
 	id, ok := m.perguntar("Código do pedido: ")
 	if !ok || id == "" {
 		return
 	}
-	if err := m.servico.ExcluirPeloUsuario(ctx, id); err != nil {
+	if err := m.servico.ExcluirPeloUsuario(id); err != nil {
 		fmt.Fprintf(m.saida, "Não foi possível excluir: %v\n", err)
 		return
 	}
