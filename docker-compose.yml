@@ -9,9 +9,11 @@ services:
     # Em algumas instalações do Docker Desktop o .erlang.cookie chega ao volume
     # como root e o RabbitMQ não inicia; o chown corrige antes de subir.
     entrypoint: ["sh", "-c", "chown -R rabbitmq:rabbitmq /var/lib/rabbitmq && exec docker-entrypoint.sh rabbitmq-server"]
+    # Só em 127.0.0.1: sem o IP, o Docker expõe as portas para a rede inteira
+    # (ex.: Wi-Fi da universidade), e qualquer um entraria com ecommerce/ecommerce.
     ports:
-      - "5672:5672"   # AMQP, usado pelos serviços
-      - "15672:15672" # painel web
+      - "127.0.0.1:5672:5672"   # AMQP, usado pelos serviços
+      - "127.0.0.1:15672:15672" # painel web
     environment:
       RABBITMQ_DEFAULT_USER: ${RABBITMQ_USER:-ecommerce}
       RABBITMQ_DEFAULT_PASS: ${RABBITMQ_PASSWORD:-ecommerce}

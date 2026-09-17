@@ -55,17 +55,19 @@ Nenhum `.pem` é versionado (`.gitignore`). Rodar o `gerar-chaves` de novo troca
 
 ### 3. Serviços
 
-Um terminal por processo:
+Um terminal por processo, nesta ordem:
 
 ```bash
 go run ./cmd/estoque
 go run ./cmd/pagamento
 go run ./cmd/entrega
-go run ./cmd/promocoes
 go run ./cmd/c1
 go run ./cmd/c2
+go run ./cmd/promocoes
 go run ./cmd/principal
 ```
+
+Cada consumidor cria a própria fila quando sobe. Uma mensagem publicada antes de a fila existir não tem para onde ir e se perde: por isso C1 e C2 sobem antes do Promoções, e os consumidores do fluxo de pedidos antes do Principal.
 
 ### 4. Demonstração do descarte
 
