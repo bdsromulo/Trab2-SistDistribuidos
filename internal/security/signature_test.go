@@ -111,7 +111,7 @@ func assinado(t *testing.T, privada *rsa.PrivateKey, env events.Envelope) events
 func TestVerifyAceitaEnvelopeIntacto(t *testing.T) {
 	privada := signature.GenerateKeys()
 	env := assinado(t, privada, envelopeDeTeste())
-	v := NovoVerifier(map[string]*rsa.PublicKey{events.Principal: &privada.PublicKey})
+	v := verifierCom(t, map[string]*rsa.PublicKey{events.Principal: &privada.PublicKey})
 
 	if err := v.Verify(env); err != nil {
 		t.Fatalf("esperava aceitar, recusou com: %v", err)
@@ -123,7 +123,7 @@ func TestVerifyRecusaDataAdulterado(t *testing.T) {
 	env := assinado(t, privada, envelopeDeTeste())
 	// exatamente o que o cmd/adulterador vai fazer: mexer no data depois de assinar
 	env.Data = json.RawMessage(`{"pedido_id":"p-999"}`)
-	v := NovoVerifier(map[string]*rsa.PublicKey{events.Principal: &privada.PublicKey})
+	v := verifierCom(t, map[string]*rsa.PublicKey{events.Principal: &privada.PublicKey})
 
 	if err := v.Verify(env); !errors.Is(err, ErrAssinaturaInvalida) {
 		t.Fatalf("esperava ErrAssinaturaInvalida, veio: %v", err)
@@ -135,7 +135,7 @@ func TestVerifyRecusaAssinaturaDeOutroProdutor(t *testing.T) {
 	outra := signature.GenerateKeys()
 	// diz ser do Principal, mas foi assinado com outra chave
 	env := assinado(t, outra, envelopeDeTeste())
-	v := NovoVerifier(map[string]*rsa.PublicKey{events.Principal: &doPrincipal.PublicKey})
+	v := verifierCom(t, map[string]*rsa.PublicKey{events.Principal: &doPrincipal.PublicKey})
 
 	if err := v.Verify(env); !errors.Is(err, ErrAssinaturaInvalida) {
 		t.Fatalf("esperava ErrAssinaturaInvalida, veio: %v", err)
@@ -144,7 +144,7 @@ func TestVerifyRecusaAssinaturaDeOutroProdutor(t *testing.T) {
 
 func TestVerifyRecusaEnvelopeSemAssinatura(t *testing.T) {
 	privada := signature.GenerateKeys()
-	v := NovoVerifier(map[string]*rsa.PublicKey{events.Principal: &privada.PublicKey})
+	v := verifierCom(t, map[string]*rsa.PublicKey{events.Principal: &privada.PublicKey})
 
 	if err := v.Verify(envelopeDeTeste()); !errors.Is(err, ErrSemAssinatura) {
 		t.Fatalf("esperava ErrSemAssinatura, veio: %v", err)
@@ -154,7 +154,7 @@ func TestVerifyRecusaEnvelopeSemAssinatura(t *testing.T) {
 func TestVerifyRecusaProdutorDesconhecido(t *testing.T) {
 	privada := signature.GenerateKeys()
 	env := assinado(t, privada, envelopeDeTeste())
-	v := NovoVerifier(map[string]*rsa.PublicKey{}) // nenhuma chave carregada
+	v := verifierCom(t, map[string]*rsa.PublicKey{}) // o Principal ainda não distribuiu a chave
 
 	if err := v.Verify(env); !errors.Is(err, ErrProdutorDesconhecido) {
 		t.Fatalf("esperava ErrProdutorDesconhecido, veio: %v", err)
@@ -169,7 +169,7 @@ func TestVerifyRecusaEventoQueNaoEDoProdutor(t *testing.T) {
 	env.Producer = events.Pagamento
 	env.EventType = events.PedidoEnviado // o dono desse evento e a Entrega
 	env = assinado(t, doPagamento, env)
-	v := NovoVerifier(map[string]*rsa.PublicKey{events.Pagamento: &doPagamento.PublicKey})
+	v := verifierCom(t, map[string]*rsa.PublicKey{events.Pagamento: &doPagamento.PublicKey})
 
 	if err := v.Verify(env); !errors.Is(err, ErrEventoNaoPertenceAoProdutor) {
 		t.Fatalf("esperava ErrEventoNaoPertenceAoProdutor, veio: %v", err)
@@ -180,7 +180,7 @@ func TestVerifyRecusaBase64InvalidoSemEntrarEmPanico(t *testing.T) {
 	privada := signature.GenerateKeys()
 	env := assinado(t, privada, envelopeDeTeste())
 	env.Signature = "isso!nao(e)base64"
-	v := NovoVerifier(map[string]*rsa.PublicKey{events.Principal: &privada.PublicKey})
+	v := verifierCom(t, map[string]*rsa.PublicKey{events.Principal: &privada.PublicKey})
 
 	if err := v.Verify(env); !errors.Is(err, ErrAssinaturaInvalida) {
 		t.Fatalf("esperava ErrAssinaturaInvalida, veio: %v", err)

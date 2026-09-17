@@ -1,12 +1,13 @@
 package catalogo
 
 import (
-	"path/filepath"
 	"testing"
 )
 
+// internal/catalogo fica a dois níveis da raiz, como cmd/<ms>: o
+// CaminhoPadrao serve sem ajuste.
 func TestCatalogoDoProjeto(t *testing.T) {
-	produtos, err := Carregar(filepath.Join("..", "..", CaminhoPadrao))
+	produtos, err := Carregar(CaminhoPadrao)
 	if err != nil {
 		t.Fatal(err)
 	}

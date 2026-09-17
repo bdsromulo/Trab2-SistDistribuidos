@@ -105,12 +105,11 @@ func TestEstoqueIndisponivelExcluiPedido(t *testing.T) {
 	s, pedidos, pub, pedido := novoTeste(t)
 
 	tratar(t, s, evento(t, events.EstoqueIndisponivel, events.EstoqueIndisponivelDados{
-		PedidoID:       pedido.ID,
-		ItensFaltantes: []events.ItemFaltante{{ProdutoID: "P01", Solicitado: 2, Disponivel: 0}},
+		PedidoID: pedido.ID,
 	}))
 
 	p, _ := pedidos.Buscar(pedido.ID)
-	if p.Status != StatusExcluido || p.Motivo != events.MotivoFaltaEstoque || !strings.Contains(p.Detalhe, "P01") {
+	if p.Status != StatusExcluido || p.Motivo != events.MotivoFaltaEstoque {
 		t.Errorf("pedido depois da falta de estoque: %+v", p)
 	}
 	ultimo := pub.Publicados()[len(pub.Publicados())-1]

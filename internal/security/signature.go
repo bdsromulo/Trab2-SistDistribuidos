@@ -76,15 +76,15 @@ func (s RSASigner) Sign(env *events.Envelope) (err error) {
 
 var _ Signer = RSASigner{}
 
-// RSAVerifier confere assinaturas com as chaves públicas dos produtores,
-// carregadas uma única vez na partida do processo.
+// RSAVerifier confere assinaturas com as chaves públicas que cada produtor
+// distribuiu, via signature.PersistKeys, para a pasta deste processo.
 type RSAVerifier struct {
-	publicas map[string]*rsa.PublicKey
+	pasta string
 }
 
-// NovoVerifier cria o verificador a partir do mapa produtor -> chave pública.
-func NovoVerifier(publicas map[string]*rsa.PublicKey) RSAVerifier {
-	return RSAVerifier{publicas: publicas}
+// NovoVerifier cria o verificador que lê as públicas de <pasta>/<produtor>-pub.
+func NovoVerifier(pasta string) RSAVerifier {
+	return RSAVerifier{pasta: pasta}
 }
 
 // Verify devolve nil somente se a mensagem for autêntica e íntegra.
@@ -97,8 +97,9 @@ func (v RSAVerifier) Verify(env events.Envelope) error {
 		return ErrSemAssinatura
 	}
 
-	publica, conhecido := v.publicas[env.Producer]
-	if !conhecido {
+	// Checado antes de montar o caminho: o producer vem da mensagem e não
+	// pode apontar para um arquivo qualquer do disco.
+	if !produtorConhecido(env.Producer) {
 		return fmt.Errorf("%w: %q", ErrProdutorDesconhecido, env.Producer)
 	}
 
@@ -106,6 +107,13 @@ func (v RSAVerifier) Verify(env events.Envelope) error {
 	dono, existe := events.ProdutorDoEvento[env.EventType]
 	if !existe || dono != env.Producer {
 		return fmt.Errorf("%w: %q não publica %q", ErrEventoNaoPertenceAoProdutor, env.Producer, env.EventType)
+	}
+
+	// Lida a cada mensagem, não na partida: cada produtor gera um par novo
+	// quando sobe, e pode subir (ou reiniciar) depois deste processo.
+	publica, err := lerPublica(CaminhoPublica(v.pasta, env.Producer))
+	if err != nil {
+		return fmt.Errorf("%w: sem chave pública de %q: %v", ErrProdutorDesconhecido, env.Producer, err)
 	}
 
 	bruta, err := base64.StdEncoding.DecodeString(env.Signature)

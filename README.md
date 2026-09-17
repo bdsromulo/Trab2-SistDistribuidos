@@ -30,39 +30,39 @@ Para este trabalho, devem ser estudados principalmente os tutoriais 1, 2, 3 e 4 
 
 ### Chaves
 
-Cada processo assina o que publica e confere o que consome. Antes de subir os
-serviços, é preciso ter as chaves no lugar:
+Cada processo assina o que publica e confere o que consome. Não há etapa
+separada para gerar chaves: ao subir, cada microsserviço chama
+`signature.GenerateKeys` e `signature.PersistKeys` (`internal/signature`), que
+gravam:
 
 | Arquivo | Caminho |
 |---|---|
 | Privada do próprio processo | `cmd/<processo>/key/private_key.pem` |
-| Pública de cada produtor | `cmd/<processo>/<produtor>-pub/public_key.pem` |
+| Pública distribuída para cada microsserviço | `cmd/<ms>/<processo>-pub/public_key.pem` |
 
 Os produtores são `principal`, `estoque`, `pagamento`, `entrega` e `promocoes`.
-As privadas não são versionadas (`.gitignore`).
+Nenhum `.pem` é versionado (`.gitignore`).
 
-Um serviço que não encontrar as chaves **não sobe**, e diz qual arquivo faltou.
-É proposital: assinatura desligada em silêncio esconderia justamente o que o
-trabalho precisa demonstrar.
-
-> O `cmd/gerar-chaves` ainda não produz esse layout — hoje ele gera um único
-> par e distribui a pública sob o nome `gerar-chaves-pub`. Enquanto isso não
-> for ajustado, o layout acima é montado à mão para testar.
+O consumidor lê a pública do produtor no momento em que a mensagem chega, então
+a ordem de subida dos serviços não importa. Como o par é refeito a cada
+partida, mensagens que ficaram na fila de uma execução anterior do produtor são
+recusadas.
 
 ### Serviços
 
-A definir conforme os processos forem ficando prontos. Um terminal por
-processo, a partir da raiz do repositório:
+Um terminal por processo, **de dentro da pasta do serviço** (os caminhos das
+chaves e de `data/` são relativos a `cmd/<ms>`):
 
 ```bash
-go run ./cmd/principal
+cd cmd/principal
+go run .
 ```
 
 ## Estrutura do projeto
 
 ```text
 .
-|-- cmd/                    um processo por pasta (go run ./cmd/<nome>)
+|-- cmd/                    um processo por pasta (cd cmd/<nome> && go run .)
 |   |-- principal/          menu no terminal, pedidos e status
 |   |-- estoque/
 |   |-- pagamento/
@@ -70,7 +70,7 @@ go run ./cmd/principal
 |   |-- promocoes/
 |   |-- c1/                 consumidor de promoções A e B
 |   |-- c2/                 consumidor de todas as promoções
-|   |-- gerar-chaves/       gera as chaves RSA de cada produtor
+|   |-- gerar-chaves/       demonstração das funções de chave e assinatura
 |   `-- adulterador/        publica mensagens inválidas (demonstração)
 |-- internal/
 |   |-- events/             contrato: envelope, tipos de evento e dados
@@ -97,7 +97,7 @@ Enquanto a assinatura e o publicador reais não existem, os serviços usam as im
 
 - A assinatura cobre todos os campos do envelope, exceto `Signature`: hash SHA-256, assinado com a chave privada do produtor (RSA-2048, PKCS#1 v1.5) e gravado em base64.
 - O consumidor escolhe a chave pública pelo campo `producer`. Mensagem sem assinatura, adulterada, de produtor desconhecido ou com evento que não pertence ao produtor é descartada.
-- As chaves privadas nunca vão para o Git; cada um gera as suas na própria máquina com `go run ./cmd/gerar-chaves`.
+- As chaves nunca vão para o Git; cada microsserviço gera o próprio par ao subir.
 
 **RabbitMQ**
 

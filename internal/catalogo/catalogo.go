@@ -9,8 +9,9 @@ import (
 	"os"
 )
 
-// CaminhoPadrao é o local do catálogo, a partir da raiz do projeto.
-const CaminhoPadrao = "data/catalogo.json"
+// CaminhoPadrao é o local do catálogo visto de dentro de cmd/<ms>, de onde
+// os serviços rodam.
+const CaminhoPadrao = "../../data/catalogo.json"
 
 // Produto é um item do catálogo.
 type Produto struct {

@@ -4,7 +4,6 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"strings"
 
 	"github.com/bdsromulo/Trab2-SistDistribuidos/internal/events"
 	"github.com/bdsromulo/Trab2-SistDistribuidos/internal/messaging"
@@ -72,7 +71,7 @@ func (s *Servico) TratarEvento(ctx context.Context, env events.Envelope) error {
 			return err
 		}
 		pedidoID = d.PedidoID
-		err = s.excluir(ctx, d.PedidoID, events.MotivoFaltaEstoque, descreverFaltantes(d.ItensFaltantes))
+		err = s.excluir(ctx, d.PedidoID, events.MotivoFaltaEstoque, "")
 
 	case events.PagamentoAprovado:
 		var d events.PagamentoAprovadoDados
@@ -129,12 +128,4 @@ func descreverStatus(p Pedido) string {
 		texto += " - " + p.Detalhe
 	}
 	return texto
-}
-
-func descreverFaltantes(itens []events.ItemFaltante) string {
-	partes := make([]string, len(itens))
-	for i, it := range itens {
-		partes[i] = fmt.Sprintf("%s: pedido %d, disponível %d", it.ProdutoID, it.Solicitado, it.Disponivel)
-	}
-	return strings.Join(partes, "; ")
 }

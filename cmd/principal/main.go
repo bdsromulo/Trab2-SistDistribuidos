@@ -15,6 +15,7 @@ import (
 	"github.com/bdsromulo/Trab2-SistDistribuidos/internal/events"
 	"github.com/bdsromulo/Trab2-SistDistribuidos/internal/messaging"
 	"github.com/bdsromulo/Trab2-SistDistribuidos/internal/security"
+	"github.com/bdsromulo/Trab2-SistDistribuidos/internal/signature"
 )
 
 func main() {
@@ -23,12 +24,10 @@ func main() {
 		log.Fatal(err)
 	}
 
-	// As chaves são carregadas antes de tudo: sem assinatura real o serviço
-	// não sobe, em vez de rodar silenciosamente sem garantia de autenticidade.
-	privada, publicas, err := security.CarregarChaves(".", events.Principal)
-	if err != nil {
-		log.Fatalf("carregar chaves (rode o cmd/gerar-chaves): %v", err)
-	}
+	// Como cada microsserviço, gera o próprio par na partida e distribui a
+	// pública para as pastas dos outros. Roda de dentro de cmd/principal.
+	privada := signature.GenerateKeys()
+	signature.PersistKeys(privada, events.Principal)
 
 	conn, chConsumo, err := messaging.Conectar(messaging.CarregarConfig())
 	if err != nil {
@@ -57,7 +56,7 @@ func main() {
 	defer cancelar()
 
 	go func() {
-		err := messaging.Consumir(ctx, chConsumo, messaging.FilaPrincipal, security.NovoVerifier(publicas), servico.TratarEvento)
+		err := messaging.Consumir(ctx, chConsumo, messaging.FilaPrincipal, security.NovoVerifier("."), servico.TratarEvento)
 		if err != nil && !errors.Is(err, context.Canceled) {
 			log.Fatalf("consumo da %s parou: %v", messaging.FilaPrincipal, err)
 		}

@@ -4,39 +4,28 @@ import (
 	"crypto/rsa"
 	"crypto/x509"
 	"encoding/pem"
+	"errors"
 	"os"
 	"path/filepath"
-	"strings"
 	"testing"
 
 	"github.com/bdsromulo/Trab2-SistDistribuidos/internal/events"
 	"github.com/bdsromulo/Trab2-SistDistribuidos/internal/signature"
 )
 
-// montarLayout cria, sob raiz, o layout que o PersistKeys do Kauan produz:
-//
-//	cmd/<processo>/key/private_key.pem
-//	cmd/<processo>/<produtor>-pub/public_key.pem
-func montarLayout(t *testing.T, raiz, processo string) *rsa.PrivateKey {
+// verifierCom grava as públicas dadas no layout <pasta>/<produtor>-pub e
+// devolve um verificador apontando para essa pasta.
+func verifierCom(t *testing.T, publicas map[string]*rsa.PublicKey) RSAVerifier {
 	t.Helper()
-	privada := signature.GenerateKeys()
-
-	dirPriv := filepath.Join(raiz, "cmd", processo, "key")
-	if err := os.MkdirAll(dirPriv, 0o755); err != nil {
-		t.Fatal(err)
-	}
-	gravarPEM(t, filepath.Join(dirPriv, "private_key.pem"),
-		"RSA PRIVATE KEY", x509.MarshalPKCS1PrivateKey(privada))
-
-	for _, produtor := range Produtores() {
-		dirPub := filepath.Join(raiz, "cmd", processo, produtor+"-pub")
-		if err := os.MkdirAll(dirPub, 0o755); err != nil {
+	pasta := t.TempDir()
+	for produtor, publica := range publicas {
+		dir := filepath.Join(pasta, produtor+"-pub")
+		if err := os.MkdirAll(dir, 0o755); err != nil {
 			t.Fatal(err)
 		}
-		gravarPEM(t, filepath.Join(dirPub, "public_key.pem"),
-			"RSA PUBLIC KEY", x509.MarshalPKCS1PublicKey(&privada.PublicKey))
+		gravarPEM(t, filepath.Join(dir, "public_key.pem"), "RSA PUBLIC KEY", x509.MarshalPKCS1PublicKey(publica))
 	}
-	return privada
+	return NovoVerifier(pasta)
 }
 
 func gravarPEM(t *testing.T, caminho, tipo string, bytes []byte) {
@@ -49,6 +38,20 @@ func gravarPEM(t *testing.T, caminho, tipo string, bytes []byte) {
 	if err := pem.Encode(f, &pem.Block{Type: tipo, Bytes: bytes}); err != nil {
 		t.Fatal(err)
 	}
+}
+
+// entrarEm troca o diretório corrente durante o teste, como se o serviço
+// tivesse sido iniciado de dentro dessa pasta.
+func entrarEm(t *testing.T, dir string) {
+	t.Helper()
+	anterior, err := os.Getwd()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Chdir(dir); err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { os.Chdir(anterior) })
 }
 
 func TestProdutoresTrazOsCincoSemRepetir(t *testing.T) {
@@ -70,88 +73,66 @@ func TestProdutoresTrazOsCincoSemRepetir(t *testing.T) {
 	}
 }
 
-func TestCarregarChavesLeOLayoutDoPersistKeys(t *testing.T) {
+// De ponta a ponta com o PersistKeys do Kauan: o Principal gera e distribui
+// a chave rodando de dentro de cmd/principal, e o verificador do Estoque, de
+// dentro de cmd/estoque, aceita o que ele assinou.
+func TestVerifierAceitaChaveDistribuidaPeloPersistKeys(t *testing.T) {
 	raiz := t.TempDir()
-	privada := montarLayout(t, raiz, events.Principal)
-
-	lida, publicas, err := CarregarChaves(raiz, events.Principal)
-	if err != nil {
-		t.Fatalf("CarregarChaves: %v", err)
-	}
-	if !lida.Equal(privada) {
-		t.Fatal("a chave privada lida nao e a que foi gravada")
-	}
-	if len(publicas) != 5 {
-		t.Fatalf("esperava 5 chaves publicas, veio %d", len(publicas))
-	}
-	for _, produtor := range Produtores() {
-		if publicas[produtor] == nil {
-			t.Fatalf("faltou a chave publica de %s", produtor)
+	for _, ms := range []string{events.Principal, events.Estoque} {
+		if err := os.MkdirAll(filepath.Join(raiz, "cmd", ms), 0o755); err != nil {
+			t.Fatal(err)
 		}
 	}
+	entrarEm(t, filepath.Join(raiz, "cmd", events.Principal))
+	privada := signature.GenerateKeys()
+	signature.PersistKeys(privada, events.Principal)
+
+	env := assinado(t, privada, envelopeDeTeste())
+	v := NovoVerifier(filepath.Join(raiz, "cmd", events.Estoque))
+	if err := v.Verify(env); err != nil {
+		t.Fatalf("o Estoque recusou evento assinado pelo Principal: %v", err)
+	}
 }
 
-// A chave lida do disco tem de funcionar de ponta a ponta, nao so existir.
-func TestChavesCarregadasAssinamEVerificam(t *testing.T) {
-	raiz := t.TempDir()
-	montarLayout(t, raiz, events.Principal)
+// O produtor gera um par novo a cada partida; o consumidor que já estava de
+// pé precisa aceitar a chave nova sem reiniciar.
+func TestVerifierUsaChaveNovaDepoisQueProdutorReinicia(t *testing.T) {
+	antiga := signature.GenerateKeys()
+	v := verifierCom(t, map[string]*rsa.PublicKey{events.Principal: &antiga.PublicKey})
 
-	privada, publicas, err := CarregarChaves(raiz, events.Principal)
-	if err != nil {
+	nova := signature.GenerateKeys()
+	gravarPEM(t, CaminhoPublica(v.pasta, events.Principal), "RSA PUBLIC KEY", x509.MarshalPKCS1PublicKey(&nova.PublicKey))
+
+	if err := v.Verify(assinado(t, nova, envelopeDeTeste())); err != nil {
+		t.Fatalf("recusou evento assinado com a chave nova: %v", err)
+	}
+	if err := v.Verify(assinado(t, antiga, envelopeDeTeste())); !errors.Is(err, ErrAssinaturaInvalida) {
+		t.Fatalf("esperava recusar a chave antiga com ErrAssinaturaInvalida, veio: %v", err)
+	}
+}
+
+// ReadPubKeyFromFile entra em pânico com PEM inválido: o verificador precisa
+// conter isso e só recusar a mensagem.
+func TestVerifierRecusaPEMCorrompidoSemEntrarEmPanico(t *testing.T) {
+	privada := signature.GenerateKeys()
+	v := verifierCom(t, map[string]*rsa.PublicKey{events.Principal: &privada.PublicKey})
+	if err := os.WriteFile(CaminhoPublica(v.pasta, events.Principal), []byte("isso nao e um PEM"), 0o644); err != nil {
 		t.Fatal(err)
 	}
+
+	if err := v.Verify(assinado(t, privada, envelopeDeTeste())); !errors.Is(err, ErrProdutorDesconhecido) {
+		t.Fatalf("esperava ErrProdutorDesconhecido, veio: %v", err)
+	}
+}
+
+func TestVerifierRecusaProducerQueApontaParaForaDaPasta(t *testing.T) {
+	privada := signature.GenerateKeys()
 	env := envelopeDeTeste()
-	if err := NovoSigner(privada).Sign(&env); err != nil {
-		t.Fatal(err)
-	}
-	if err := NovoVerifier(publicas).Verify(env); err != nil {
-		t.Fatalf("assinou com a privada do disco mas a publica do disco recusou: %v", err)
-	}
-}
+	env.Producer = "../principal"
+	env = assinado(t, privada, env)
+	v := verifierCom(t, map[string]*rsa.PublicKey{events.Principal: &privada.PublicKey})
 
-func TestCarregarChavesFalhaSemPrivadaNomeandoOArquivo(t *testing.T) {
-	raiz := t.TempDir()
-	montarLayout(t, raiz, events.Principal)
-	if err := os.Remove(filepath.Join(raiz, "cmd", events.Principal, "key", "private_key.pem")); err != nil {
-		t.Fatal(err)
-	}
-
-	_, _, err := CarregarChaves(raiz, events.Principal)
-	if err == nil {
-		t.Fatal("esperava erro com a privada ausente, veio nil")
-	}
-	if !strings.Contains(err.Error(), "private_key.pem") {
-		t.Fatalf("o erro nao nomeia o arquivo que faltou: %v", err)
-	}
-}
-
-// ReadPubKeyFromFile entra em panico com arquivo ausente: o carregador
-// precisa conter isso e devolver erro, senao o servico cai com stack trace.
-func TestCarregarChavesFalhaSemPublicaSemEntrarEmPanico(t *testing.T) {
-	raiz := t.TempDir()
-	montarLayout(t, raiz, events.Principal)
-	if err := os.Remove(filepath.Join(raiz, "cmd", events.Principal, events.Estoque+"-pub", "public_key.pem")); err != nil {
-		t.Fatal(err)
-	}
-
-	_, _, err := CarregarChaves(raiz, events.Principal)
-	if err == nil {
-		t.Fatal("esperava erro com a publica ausente, veio nil")
-	}
-	if !strings.Contains(err.Error(), events.Estoque) {
-		t.Fatalf("o erro nao diz de qual produtor era a chave: %v", err)
-	}
-}
-
-func TestCarregarChavesFalhaComPEMCorrompido(t *testing.T) {
-	raiz := t.TempDir()
-	montarLayout(t, raiz, events.Principal)
-	alvo := filepath.Join(raiz, "cmd", events.Principal, "key", "private_key.pem")
-	if err := os.WriteFile(alvo, []byte("isso nao e um PEM"), 0o644); err != nil {
-		t.Fatal(err)
-	}
-
-	if _, _, err := CarregarChaves(raiz, events.Principal); err == nil {
-		t.Fatal("esperava erro com PEM corrompido, veio nil")
+	if err := v.Verify(env); !errors.Is(err, ErrProdutorDesconhecido) {
+		t.Fatalf("esperava ErrProdutorDesconhecido, veio: %v", err)
 	}
 }

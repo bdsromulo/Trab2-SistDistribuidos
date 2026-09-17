@@ -16,11 +16,12 @@ type Config struct {
 	Senha   string
 }
 
-// CarregarConfig lê a conexão das variáveis de ambiente. Se existir um
-// arquivo .env na pasta atual, ele é carregado antes; variáveis já definidas
-// no terminal têm prioridade. O que faltar usa os valores do .env.example.
+// CarregarConfig lê a conexão das variáveis de ambiente. Se existir o .env
+// na raiz do repositório (vista de cmd/<ms>, de onde os serviços rodam), ele
+// é carregado antes; variáveis já definidas no terminal têm prioridade. O que
+// faltar usa os valores do .env.example.
 func CarregarConfig() Config {
-	_ = godotenv.Load() // sem .env, seguem as variáveis do terminal e os padrões
+	_ = godotenv.Load("../../.env") // sem .env, seguem as variáveis do terminal e os padrões
 
 	return Config{
 		Host:    valorOuPadrao("RABBITMQ_HOST", "localhost"),

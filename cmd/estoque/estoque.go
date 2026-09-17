@@ -19,7 +19,7 @@ type Estoque struct {
 }
 
 func loadEstoque() Estoque {
-	content, err := os.ReadFile("data/estoque.json")
+	content, err := os.ReadFile("../../data/estoque.json")
 	u.FailOnError(err, "Erro ao carregar o estoque")
 
 	var l []ProdutoEstoque
